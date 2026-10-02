@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 import dateutil.parser
@@ -80,9 +80,12 @@ class ICalCalendarProvider(BaseCalendarProvider):
                 start_dt = datetime.combine(start_val, time(0, 0))
                 if dtend:
                     end_val = dtend.dt
-                    end_dt = datetime.combine(end_val, time(23, 59))
+                    if isinstance(end_val, date) and not isinstance(end_val, datetime):
+                        if end_val > start_val:
+                            end_val = end_val - timedelta(days=1)
+                    end_dt = datetime.combine(end_val, time(23, 59, 59))
                 else:
-                    end_dt = datetime.combine(start_val, time(23, 59))
+                    end_dt = datetime.combine(start_val, time(23, 59, 59))
             else:
                 # Is datetime
                 start_dt = self._normalize_datetime(start_val)

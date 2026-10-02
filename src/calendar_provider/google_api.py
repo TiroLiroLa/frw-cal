@@ -3,7 +3,7 @@
 import json
 import logging
 import os
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -231,9 +231,12 @@ class GoogleCalendarProvider(BaseCalendarProvider):
 
                 if "date" in end_raw:
                     end_d = date.fromisoformat(end_raw["date"])
-                    end_dt = datetime.combine(end_d, time(23, 59))
+                    # In Google Calendar / RFC 5545, end date for all-day events is exclusive (+1 day)
+                    if end_d > start_d:
+                        end_d = end_d - timedelta(days=1)
+                    end_dt = datetime.combine(end_d, time(23, 59, 59))
                 else:
-                    end_dt = datetime.combine(start_d, time(23, 59))
+                    end_dt = datetime.combine(start_d, time(23, 59, 59))
             elif "dateTime" in start_raw:
                 start_iso = start_raw["dateTime"]
                 start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))

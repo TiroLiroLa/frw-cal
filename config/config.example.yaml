@@ -47,7 +47,7 @@ calendar:
     credentials_file: "config/credentials.json"
     token_file: "config/token.json"
     # Lista de IDs ou apelidos de calendários para sincronizar:
-    # Use "primary", "birthdays" (aniversários dos contatos) e "holidays" (feriados nacionais)
+    # Suporta "primary", "birthdays" (aniversários dos contatos) e "holidays" (feriados)
     calendar_ids:
       - "primary"
       - "birthdays"
