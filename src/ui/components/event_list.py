@@ -4,7 +4,7 @@ from datetime import date
 from typing import List, Optional, Tuple
 from ..canvas import EPaperCanvas
 from ..fonts import get_font
-from ..utils import sanitize_text
+from ..utils import sanitize_text, truncate_to_width
 from ...calendar_provider.base import CalendarEvent
 from ...weather import WeatherInfo
 
@@ -21,6 +21,7 @@ def render_event_list(
 ):
     """Renders the agenda and upcoming appointments list with large, bold typography."""
     x0, y0, x1, y1 = rect
+    width = x1 - x0
 
     font_title = get_font("bold", 14)
     font_weather = get_font("bold", 12)
@@ -137,21 +138,15 @@ def render_event_list(
             )
             current_y += 16
 
-        # Title (clean emoji and truncate)
-        clean_title = sanitize_text(ev.summary)
-        max_chars = 24
-        if len(clean_title) > max_chars:
-            clean_title = clean_title[: max_chars - 1].rstrip() + "…"
-
+        # Title: truncate based on actual pixel width
+        display_title = truncate_to_width(ev.summary, font_item_title, max_width_px=width - 4)
         canvas.draw_text(
-            (x0, current_y), clean_title, font=font_item_title, color="black"
+            (x0, current_y), display_title, font=font_item_title, color="black"
         )
 
         # Location if present and fits
         if ev.location and item_h >= 50:
-            loc = sanitize_text(ev.location)
-            if len(loc) > 28:
-                loc = loc[:26].rstrip() + "…"
+            loc = truncate_to_width(ev.location, font_item_sub, max_width_px=width - 4)
             canvas.draw_text(
                 (x0, current_y + 16), loc, font=font_item_sub, color="black"
             )

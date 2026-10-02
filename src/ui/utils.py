@@ -18,8 +18,22 @@ def sanitize_text(text: str) -> str:
     """Removes unsupported emoji characters and trims excess whitespace."""
     if not text:
         return ""
-    # Strip emojis to prevent empty square glyph boxes on e-ink
     cleaned = _EMOJI_PATTERN.sub("", text)
-    # Normalize spaces
     cleaned = " ".join(cleaned.split())
     return cleaned
+
+
+def truncate_to_width(text: str, font, max_width_px: int) -> str:
+    """Truncates text with ellipsis based on actual pixel width rather than character count."""
+    if not text:
+        return ""
+    cleaned = sanitize_text(text)
+    bbox = font.getbbox(cleaned)
+    if bbox[2] - bbox[0] <= max_width_px:
+        return cleaned
+
+    cur = cleaned
+    while cur and (font.getbbox(cur + "…")[2] - font.getbbox(cur + "…")[0]) > max_width_px:
+        cur = cur[:-1]
+
+    return cur.rstrip() + "…"
