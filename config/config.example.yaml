@@ -1,0 +1,86 @@
+# ==============================================================================
+# Configuração do Smart Calendar (frw-cal)
+# Display: WeAct Studio 4.2" E-Paper (Preto, Branco, Vermelho - 400x300 SSD1683)
+# Hardware: Raspberry Pi Zero 2W
+# ==============================================================================
+
+general:
+  # Idioma e fuso horário
+  language: "pt_BR"
+  timezone: "America/Sao_Paulo"
+  date_format: "%d/%m/%Y"
+  time_format: "%H:%M"
+
+display:
+  # Modo de exibição: "mock" (para testes no PC/gera PNG) ou "epaper" (no Raspberry Pi)
+  type: "mock"
+  driver: "ssd1683"
+  width: 400
+  height: 300
+  # Rotação da tela: 0 ou 180 (caso monte o display invertido)
+  rotation: 0
+
+  # Pinos GPIO (Numeração BCM do Raspberry Pi)
+  # Pinout padrão recomendado:
+  #   VCC  -> 3.3V (Pino 1)
+  #   GND  -> Ground (Pino 6)
+  #   DIN  -> MOSI / GPIO 10 (Pino 19)
+  #   CLK  -> SCLK / GPIO 11 (Pino 23)
+  #   CS   -> CE0 / GPIO 8 (Pino 24)
+  #   DC   -> GPIO 25 (Pino 22)
+  #   RST  -> GPIO 17 (Pino 11)
+  #   BUSY -> GPIO 24 (Pino 18)
+  pins:
+    cs: 8
+    dc: 25
+    rst: 17
+    busy: 24
+
+calendar:
+  # Modo de integração:
+  #  - "mock": Dados de demonstração (ideal para testes locais sem credenciais)
+  #  - "google_api": Conexão oficial OAuth2 com Google Agenda (credentials.json)
+  #  - "ical": Link privado iCal/ICS do Google Agenda (não precisa de credenciais de desenvolvedor)
+  mode: "mock"
+
+  google_api:
+    credentials_file: "config/credentials.json"
+    token_file: "config/token.json"
+    # Lista de IDs de calendários para sincronizar
+    calendar_ids:
+      - "primary"
+      # Para incluir aniversários dos contatos do Google:
+      # - "addressbook#contacts@group.v.calendar.google.com"
+      # Para incluir feriados nacionais brasileiros:
+      # - "pt.brazilian#holiday@group.v.calendar.google.com"
+
+  ical:
+    # Caso use o modo 'ical', insira as URLs privadas do Google Agenda:
+    # (Em Configurações da Agenda -> Integrar agenda -> Endereço secreto no formato iCal)
+    urls: []
+    # - "https://calendar.google.com/calendar/ical/seu_email%40gmail.com/private-xxxx/basic.ics"
+
+  # Quantidade máxima de eventos para listar no painel lateral
+  max_upcoming_events: 5
+
+  # Dias à frente para buscar eventos futuros
+  lookahead_days: 14
+
+weather:
+  # Previsão do tempo simples (Open-Meteo API, gratuita e sem necessidade de chave de API)
+  enabled: true
+  latitude: -23.5505
+  longitude: -46.6333
+  city_name: "São Paulo"
+  units: "celsius"
+
+refresh:
+  # Intervalo de atualização durante o dia (em minutos, mínimo recomendado: 15-30)
+  interval_minutes: 30
+
+  # Horários ativos para atualizar o e-paper (evita desgaste da tela de madrugada)
+  active_hours_start: 6
+  active_hours_end: 23
+
+  # Atualização especial à meia-noite (muda o dia no grid)
+  midnight_update: true

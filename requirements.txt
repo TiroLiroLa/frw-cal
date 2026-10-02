@@ -1,0 +1,17 @@
+# Core dependencies
+pillow>=10.0.0
+pyyaml>=6.0
+requests>=2.31.0
+python-dateutil>=2.8.2
+
+# Google Calendar API (OAuth 2.0)
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.1.0
+
+# iCalendar support (ICS URLs and backup)
+icalendar>=5.0.0
+
+# Hardware dependencies (Raspberry Pi only - install on the device)
+# spidev>=3.6
+# RPi.GPIO>=0.7.1

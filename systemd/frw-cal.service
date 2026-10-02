@@ -1,0 +1,17 @@
+[Unit]
+Description=Smart E-Paper Calendar (frw-cal)
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/frw-cal
+ExecStart=/home/pi/frw-cal/.venv/bin/python3 -m src.main --daemon
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
