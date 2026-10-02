@@ -19,6 +19,7 @@ sudo apt-get install -y \
     python3-pil \
     python3-numpy \
     python3-spidev \
+    python3-gpiozero \
     python3-rpi.gpio \
     fonts-liberation \
     git \
@@ -47,7 +48,7 @@ fi
 echo "[4/5] Instalando pacotes Python..."
 .venv/bin/pip install --upgrade pip
 .venv/bin/pip install -r requirements.txt
-.venv/bin/pip install spidev RPi.GPIO || true
+.venv/bin/pip install gpiozero spidev || true
 
 # 5. Criar arquivo de configuração inicial se não existir
 echo "[5/5] Verificando arquivo de configuração..."
