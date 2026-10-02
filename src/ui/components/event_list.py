@@ -4,7 +4,7 @@ from datetime import date
 from typing import List, Optional, Tuple
 from ..canvas import EPaperCanvas
 from ..fonts import get_font
-from ..utils import sanitize_text, truncate_to_width
+from ..utils import sanitize_text, truncate_to_width, wrap_text_to_width
 from ...calendar_provider.base import CalendarEvent
 from ...weather import WeatherInfo
 
@@ -138,17 +138,22 @@ def render_event_list(
             )
             current_y += 16
 
-        # Title: truncate based on actual pixel width
-        display_title = truncate_to_width(ev.summary, font_item_title, max_width_px=width - 4)
-        canvas.draw_text(
-            (x0, current_y), display_title, font=font_item_title, color="black"
+        # Title: wrapped into up to 2 lines if needed
+        max_title_lines = 2 if item_h >= 45 else 1
+        title_lines = wrap_text_to_width(
+            ev.summary, font_item_title, max_width_px=width - 4, max_lines=max_title_lines
         )
+        for line in title_lines:
+            canvas.draw_text(
+                (x0, current_y), line, font=font_item_title, color="black"
+            )
+            current_y += 15
 
-        # Location if present and fits
-        if ev.location and item_h >= 50:
+        # Location if present and fits without colliding with separator
+        if ev.location and (current_y + 14 < item_y + item_h - 4):
             loc = truncate_to_width(ev.location, font_item_sub, max_width_px=width - 4)
             canvas.draw_text(
-                (x0, current_y + 16), loc, font=font_item_sub, color="black"
+                (x0, current_y + 1), loc, font=font_item_sub, color="black"
             )
 
         # Separator line between items (except last item)
