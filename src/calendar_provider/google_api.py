@@ -1,15 +1,14 @@
-"""Google Calendar API provider using OAuth 2.0."""
+"""Google Calendar API provider using OAuth 2.0 with dynamic calendar resolution."""
 
 import json
 import logging
 import os
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
 from .base import BaseCalendarProvider, CalendarEvent
@@ -21,7 +20,7 @@ CACHE_FILE = Path(__file__).resolve().parent.parent.parent / "data" / "google_ca
 
 
 class GoogleCalendarProvider(BaseCalendarProvider):
-    """Fetches events using the official Google Calendar REST API v3."""
+    """Fetches events using the official Google Calendar REST API v3 with auto-discovery."""
 
     def __init__(
         self,
@@ -31,7 +30,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
     ):
         self.credentials_file = credentials_file
         self.token_file = token_file
-        self.calendar_ids = calendar_ids or ["primary"]
+        self.calendar_ids = calendar_ids or ["primary", "birthdays", "holidays"]
         self.service = None
 
     def _authenticate(self) -> bool:
@@ -42,7 +41,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             except Exception as e:
                 logger.error(f"Error loading token file {self.token_file}: {e}")
 
-        # If there are no valid credentials, try refresh or prompt
+        # Refresh token if expired
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 try:
@@ -53,13 +52,6 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 except Exception as e:
                     logger.error(f"Error refreshing token: {e}")
                     creds = None
-            else:
-                if not os.path.exists(self.credentials_file):
-                    logger.error(
-                        f"Credentials file '{self.credentials_file}' not found. "
-                        "Please configure OAuth credentials or run src/auth.py."
-                    )
-                    return False
 
         if not creds or not creds.valid:
             return False
@@ -70,6 +62,88 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         except Exception as e:
             logger.error(f"Failed to build Google Calendar service: {e}")
             return False
+
+    def _get_user_calendars(self) -> List[Dict]:
+        """Fetch all calendars available in the user's Google account."""
+        try:
+            res = self.service.calendarList().list().execute()
+            items = res.get("items", [])
+            logger.info(f"Retrieved {len(items)} calendars from Google account:")
+            for c in items:
+                logger.info(f"  -> '{c.get('summary')}' [ID: {c.get('id')}]")
+            return items
+        except Exception as e:
+            logger.warning(f"Could not list account calendars: {e}")
+            return []
+
+    def _resolve_calendar_targets(self, user_calendars: List[Dict]) -> List[Tuple[str, str, str]]:
+        """Resolves configured aliases ('birthdays', 'holidays', 'primary') to actual calendar IDs.
+        
+        Returns a list of tuples: (calendar_id, display_name, category)
+        where category is 'primary', 'birthday', 'holiday', or 'general'.
+        """
+        targets = []
+        cals_by_id = {c.get("id"): c for c in user_calendars}
+
+        for req in self.calendar_ids:
+            req_clean = req.strip()
+            req_lower = req_clean.lower()
+
+            # 1. Primary
+            if req_lower == "primary":
+                targets.append(("primary", "Principal", "primary"))
+                continue
+
+            # 2. Birthdays alias
+            if req_lower in ("birthdays", "aniversarios", "aniversários", "birthday"):
+                found = False
+                for c in user_calendars:
+                    summary = c.get("summary", "").lower()
+                    cid = c.get("id", "").lower()
+                    if ("aniversário" in summary or "aniversario" in summary or
+                            "birthday" in summary or "contacts" in cid):
+                        targets.append((c.get("id"), c.get("summary", "Aniversários"), "birthday"))
+                        found = True
+                        break
+                if not found:
+                    # Fallback to standard Google Contacts virtual calendar ID
+                    targets.append(
+                        ("addressbook#contacts@group.v.calendar.google.com", "Aniversários (Contatos)", "birthday")
+                    )
+                continue
+
+            # 3. Holidays alias
+            if req_lower in ("holidays", "feriados", "feriado"):
+                found = False
+                for c in user_calendars:
+                    summary = c.get("summary", "").lower()
+                    cid = c.get("id", "").lower()
+                    if "feriado" in summary or "holiday" in summary or "holiday" in cid:
+                        targets.append((c.get("id"), c.get("summary", "Feriados"), "holiday"))
+                        found = True
+                        break
+                if not found:
+                    # Fallback to standard Brazilian holiday calendar ID
+                    targets.append(
+                        ("pt-br.brazilian#holiday@group.v.calendar.google.com", "Feriados no Brasil", "holiday")
+                    )
+                continue
+
+            # 4. Auto-correct common typo in Brazilian holiday calendar
+            if "pt.brazilian#holiday" in req_clean:
+                req_clean = req_clean.replace("pt.brazilian", "pt-br.brazilian")
+
+            # 5. Direct ID or summary match
+            category = "general"
+            if "contacts" in req_clean or "anivers" in req_lower:
+                category = "birthday"
+            elif "holiday" in req_clean or "feriado" in req_lower:
+                category = "holiday"
+
+            name = cals_by_id.get(req_clean, {}).get("summary", req_clean)
+            targets.append((req_clean, name, category))
+
+        return targets
 
     def get_events(self, start_date: date, end_date: date) -> List[CalendarEvent]:
         events: List[CalendarEvent] = []
@@ -82,34 +156,57 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         time_min = datetime.combine(start_date, time.min).isoformat() + "Z"
         time_max = datetime.combine(end_date, time.max).isoformat() + "Z"
 
+        user_calendars = self._get_user_calendars()
+        targets = self._resolve_calendar_targets(user_calendars)
+
         fetched_any = False
 
-        for cal_id in self.calendar_ids:
+        for cal_id, cal_name, category in targets:
             try:
-                logger.info(f"Querying Google Calendar: {cal_id}")
-                events_result = (
-                    self.service.events()
-                    .list(
-                        calendarId=cal_id,
-                        timeMin=time_min,
-                        timeMax=time_max,
-                        maxResults=50,
-                        singleEvents=True,
-                        orderBy="startTime",
-                    )
-                    .execute()
-                )
+                logger.info(f"Querying Google Calendar '{cal_name}' [ID: {cal_id}]...")
 
-                items = events_result.get("items", [])
-                logger.info(f"Found {len(items)} events in {cal_id}")
+                # First try with orderBy='startTime' and singleEvents=True
+                items = []
+                try:
+                    res = (
+                        self.service.events()
+                        .list(
+                            calendarId=cal_id,
+                            timeMin=time_min,
+                            timeMax=time_max,
+                            maxResults=50,
+                            singleEvents=True,
+                            orderBy="startTime",
+                        )
+                        .execute()
+                    )
+                    items = res.get("items", [])
+                except Exception as e_order:
+                    # Some virtual/contact calendars reject orderBy='startTime'
+                    logger.debug(f"Query with orderBy failed for '{cal_name}' ({e_order}), retrying without orderBy...")
+                    res = (
+                        self.service.events()
+                        .list(
+                            calendarId=cal_id,
+                            timeMin=time_min,
+                            timeMax=time_max,
+                            maxResults=50,
+                            singleEvents=True,
+                        )
+                        .execute()
+                    )
+                    items = res.get("items", [])
+
+                logger.info(f"Retrieved {len(items)} events from '{cal_name}'.")
 
                 for item in items:
-                    event = self._parse_google_event(item, cal_id)
+                    event = self._parse_google_event(item, cal_id, cal_name, category)
                     if event:
                         events.append(event)
                 fetched_any = True
+
             except Exception as e:
-                logger.error(f"Error fetching from calendar '{cal_id}': {e}")
+                logger.warning(f"Could not fetch events from calendar '{cal_name}' ({cal_id}): {e}")
 
         if fetched_any:
             self._save_cache(events)
@@ -118,7 +215,9 @@ class GoogleCalendarProvider(BaseCalendarProvider):
         else:
             return self._load_cache(start_date, end_date)
 
-    def _parse_google_event(self, item: dict, cal_id: str) -> Optional[CalendarEvent]:
+    def _parse_google_event(
+        self, item: dict, cal_id: str, cal_name: str, category: str
+    ) -> Optional[CalendarEvent]:
         try:
             summary = item.get("summary", "Sem título")
             start_raw = item.get("start", {})
@@ -126,7 +225,6 @@ class GoogleCalendarProvider(BaseCalendarProvider):
 
             all_day = False
             if "date" in start_raw:
-                # All day event (YYYY-MM-DD)
                 all_day = True
                 start_d = date.fromisoformat(start_raw["date"])
                 start_dt = datetime.combine(start_d, time(0, 0))
@@ -156,14 +254,18 @@ class GoogleCalendarProvider(BaseCalendarProvider):
             is_birthday = False
             is_holiday = False
 
-            if "contacts" in cal_id or item.get("eventType") == "birthday":
-                is_birthday = True
-
             summary_lower = summary.lower()
-            if any(k in summary_lower for k in ["aniversário", "aniversario", "bday", "birthday"]):
+
+            if (category == "birthday" or
+                    "contacts" in cal_id or
+                    item.get("eventType") == "birthday" or
+                    any(k in summary_lower for k in ["aniversário", "aniversario", "bday", "birthday"])):
                 is_birthday = True
 
-            if "holiday" in cal_id or "feriado" in summary_lower:
+            if (category == "holiday" or
+                    "holiday" in cal_id or
+                    "feriado" in summary_lower or
+                    "feriado" in cal_name.lower()):
                 is_holiday = True
 
             return CalendarEvent(
@@ -173,7 +275,7 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 all_day=all_day,
                 is_birthday=is_birthday,
                 is_holiday=is_holiday,
-                calendar_name=cal_id,
+                calendar_name=cal_name,
                 description=item.get("description"),
                 location=item.get("location"),
             )

@@ -46,13 +46,12 @@ calendar:
   google_api:
     credentials_file: "config/credentials.json"
     token_file: "config/token.json"
-    # Lista de IDs de calendários para sincronizar
+    # Lista de IDs ou apelidos de calendários para sincronizar:
+    # Use "primary", "birthdays" (aniversários dos contatos) e "holidays" (feriados nacionais)
     calendar_ids:
       - "primary"
-      # Para incluir aniversários dos contatos do Google:
-      # - "addressbook#contacts@group.v.calendar.google.com"
-      # Para incluir feriados nacionais brasileiros:
-      # - "pt.brazilian#holiday@group.v.calendar.google.com"
+      - "birthdays"
+      - "holidays"
 
   ical:
     # Caso use o modo 'ical', insira as URLs privadas do Google Agenda:

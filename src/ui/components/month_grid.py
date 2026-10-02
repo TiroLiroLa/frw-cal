@@ -53,9 +53,15 @@ def render_month_grid(
                 check_d = date(current_date.year, current_date.month, d)
                 if start_d <= check_d <= end_d:
                     if d not in month_events:
-                        month_events[d] = {"has_event": True, "has_birthday": False}
+                        month_events[d] = {
+                            "has_event": True,
+                            "has_birthday": False,
+                            "has_holiday": False,
+                        }
                     if ev.is_birthday:
                         month_events[d]["has_birthday"] = True
+                    if ev.is_holiday:
+                        month_events[d]["has_holiday"] = True
             except ValueError:
                 break
 
@@ -83,6 +89,8 @@ def render_month_grid(
             is_sunday = (col_idx == 0)
             has_event = day_num in month_events
             is_birthday = has_event and month_events[day_num]["has_birthday"]
+            is_holiday = has_event and month_events[day_num]["has_holiday"]
+            is_special = is_birthday or is_holiday or is_sunday
 
             day_text = str(day_num)
             bbox = font_day_bold.getbbox(day_text)
@@ -105,9 +113,9 @@ def render_month_grid(
                 canvas.draw_rounded_rectangle(box_rect, radius=4, fill="red")
                 canvas.draw_text(text_pos, day_text, font=font_day_bold, color="white")
             elif has_event:
-                # 2. EVENT DAY: Outlined box around the number
-                outline_color = "red" if (is_birthday or is_sunday) else "black"
-                text_color = "red" if (is_birthday or is_sunday) else "black"
+                # 2. EVENT DAY: Outlined box around the number (Red for special days, Black for routine)
+                outline_color = "red" if is_special else "black"
+                text_color = "red" if is_special else "black"
                 canvas.draw_rounded_rectangle(
                     box_rect, radius=4, outline=outline_color, width=2
                 )

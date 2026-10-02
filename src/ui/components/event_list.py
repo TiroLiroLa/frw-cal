@@ -99,6 +99,10 @@ def render_event_list(
             badge_text = "ANIVERSÁRIO"
             badge_color = "red"
             badge_bg = True
+        elif ev.is_holiday:
+            badge_text = "FERIADO"
+            badge_color = "red"
+            badge_bg = True
         elif is_today:
             time_str = ev.start.strftime("%H:%M") if not ev.all_day else "DIA TODO"
             badge_text = f"HOJE · {time_str}"
