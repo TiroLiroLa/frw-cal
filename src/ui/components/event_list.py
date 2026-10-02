@@ -17,24 +17,24 @@ def render_event_list(
     events: List[CalendarEvent],
     weather: Optional[WeatherInfo],
     rect: Tuple[int, int, int, int],
-    max_events: int = 5,
+    max_events: int = 4,
 ):
-    """Renders the agenda and upcoming appointments list."""
+    """Renders the agenda and upcoming appointments list with large, bold typography."""
     x0, y0, x1, y1 = rect
 
-    font_title = get_font("bold", 13)
-    font_weather = get_font("bold", 10)
-    font_badge = get_font("bold", 10)
-    font_item_title = get_font("bold", 11)
-    font_item_sub = get_font("regular", 10)
+    font_title = get_font("bold", 14)
+    font_weather = get_font("bold", 12)
+    font_badge = get_font("bold", 11)
+    font_item_title = get_font("bold", 13)
+    font_item_sub = get_font("bold", 11)
 
     # 1. Section Header: "AGENDA" + Red Pill Accent + Weather
     header_y = y0 + 1
-    # Small red vertical pill
+    # Red vertical accent bar
     canvas.draw_rounded_rectangle(
-        (x0, header_y + 1, x0 + 4, header_y + 15), radius=2, fill="red"
+        (x0, header_y + 1, x0 + 4, header_y + 17), radius=2, fill="red"
     )
-    canvas.draw_text((x0 + 9, header_y), "AGENDA", font=font_title, color="black")
+    canvas.draw_text((x0 + 10, header_y), "AGENDA", font=font_title, color="black")
 
     # Weather info on top-right of agenda header
     if weather:
@@ -42,7 +42,7 @@ def render_event_list(
         w_text = f"{int(round(weather.temperature))}°C · {w_desc}"
         bbox_w = font_weather.getbbox(w_text)
         w_width = bbox_w[2] - bbox_w[0]
-        if w_width < 140:
+        if w_width < 145:
             canvas.draw_text(
                 (x1 - w_width - 2, header_y + 2),
                 w_text,
@@ -51,7 +51,7 @@ def render_event_list(
             )
 
     # Divider line under agenda header
-    divider_y = header_y + 19
+    divider_y = header_y + 21
     canvas.draw_line((x0, divider_y, x1, divider_y), color="black", width=1)
 
     # 2. Filter upcoming events (today and future)
@@ -62,30 +62,31 @@ def render_event_list(
     display_events = upcoming[:max_events]
 
     # 3. Render event items
-    start_y = divider_y + 5
+    start_y = divider_y + 6
     avail_height = (y1 - 4) - start_y
 
     if not display_events:
         # Empty state message
         empty_y = start_y + 40
-        font_empty = get_font("regular", 11)
-        font_empty_bold = get_font("bold", 12)
+        font_empty = get_font("bold", 13)
+        font_empty_sub = get_font("bold", 12)
         canvas.draw_text(
             (x0 + 10, empty_y),
             "Nenhum compromisso agendado",
-            font=font_empty_bold,
+            font=font_empty,
             color="black",
         )
         canvas.draw_text(
-            (x0 + 10, empty_y + 18),
+            (x0 + 10, empty_y + 20),
             "Aproveite o seu dia livre!",
-            font=font_empty,
+            font=font_empty_sub,
             color="red",
         )
         return
 
     n_events = len(display_events)
-    item_h = min(avail_height // n_events, 52)
+    # Optimized spacing for up to 4 events
+    item_h = min(avail_height // n_events, 65)
 
     for idx, ev in enumerate(display_events):
         item_y = start_y + idx * item_h
@@ -119,22 +120,22 @@ def render_event_list(
         if badge_bg:
             bbox_b = font_badge.getbbox(badge_text)
             bw = (bbox_b[2] - bbox_b[0]) + 10
-            bh = 14
+            bh = 17
             badge_rect = (x0, current_y, x0 + bw, current_y + bh)
-            canvas.draw_rounded_rectangle(badge_rect, radius=3, fill=badge_color)
+            canvas.draw_rounded_rectangle(badge_rect, radius=4, fill=badge_color)
             canvas.draw_text(
-                (x0 + 5, current_y + 1), badge_text, font=font_badge, color="white"
+                (x0 + 5, current_y + 2), badge_text, font=font_badge, color="white"
             )
-            current_y += bh + 3
+            current_y += bh + 4
         else:
             canvas.draw_text(
                 (x0, current_y), badge_text, font=font_badge, color=badge_color
             )
-            current_y += 14
+            current_y += 16
 
         # Title (clean emoji and truncate)
         clean_title = sanitize_text(ev.summary)
-        max_chars = 26
+        max_chars = 24
         if len(clean_title) > max_chars:
             clean_title = clean_title[: max_chars - 1].rstrip() + "…"
 
@@ -143,12 +144,12 @@ def render_event_list(
         )
 
         # Location if present and fits
-        if ev.location and item_h >= 46:
+        if ev.location and item_h >= 50:
             loc = sanitize_text(ev.location)
-            if len(loc) > 30:
-                loc = loc[:28].rstrip() + "…"
+            if len(loc) > 28:
+                loc = loc[:26].rstrip() + "…"
             canvas.draw_text(
-                (x0, current_y + 13), loc, font=font_item_sub, color="black"
+                (x0, current_y + 16), loc, font=font_item_sub, color="black"
             )
 
         # Separator line between items (except last item)

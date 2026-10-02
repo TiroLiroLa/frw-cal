@@ -11,9 +11,9 @@ def render_status_bar(
     last_update: datetime,
     rect: Tuple[int, int, int, int],
 ):
-    """Renders small status info at the bottom of the left column."""
+    """Renders small status info at the bottom of the left column with bold font."""
     x0, y0, x1, y1 = rect
-    font = get_font("regular", 9)
+    font = get_font("bold", 10)
 
     # Top thin line
     canvas.draw_line((x0, y0, x1, y0), color="black", width=1)

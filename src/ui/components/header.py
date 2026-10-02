@@ -32,16 +32,16 @@ MONTHS_PT = [
 
 
 def render_header(canvas: EPaperCanvas, current_date: date, rect: Tuple[int, int, int, int]):
-    """Renders the date block on the top-left section."""
+    """Renders the date block on the top-left section with large, bold typography."""
     x0, y0, x1, y1 = rect
 
     # 1. Day of week badge (Capsule in RED with white bold text)
     weekday_str = WEEKDAYS_PT[current_date.weekday()]
-    badge_h = 20
+    badge_h = 22
     badge_rect = (x0, y0, x1, y0 + badge_h)
     canvas.draw_rounded_rectangle(badge_rect, radius=5, fill="red")
 
-    font_badge = get_font("bold", 11)
+    font_badge = get_font("bold", 12)
     bbox = font_badge.getbbox(weekday_str)
     text_w = bbox[2] - bbox[0]
     badge_w = x1 - x0
@@ -50,16 +50,16 @@ def render_header(canvas: EPaperCanvas, current_date: date, rect: Tuple[int, int
 
     # 2. Large Day number
     day_str = f"{current_date.day:02d}"
-    font_day = get_font("bold", 40)
-    day_y = y0 + badge_h + 4
-    canvas.draw_text((x0 + 4, day_y), day_str, font=font_day, color="black")
+    font_day = get_font("bold", 44)
+    day_y = y0 + badge_h + 3
+    canvas.draw_text((x0 + 2, day_y), day_str, font=font_day, color="black")
 
     # 3. Month and Year beside day number
     month_str = MONTHS_PT[current_date.month - 1]
     year_str = str(current_date.year)
 
-    font_month = get_font("bold", 13)
-    font_year = get_font("bold", 13)
+    font_month = get_font("bold", 14)
+    font_year = get_font("bold", 14)
 
     month_x = x0 + 64
     canvas.draw_text((month_x, day_y + 4), month_str, font=font_month, color="black")

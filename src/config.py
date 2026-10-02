@@ -109,7 +109,7 @@ class Config:
 
     @property
     def max_upcoming_events(self) -> int:
-        return self._data.get("calendar", {}).get("max_upcoming_events", 5)
+        return self._data.get("calendar", {}).get("max_upcoming_events", 4)
 
     @property
     def lookahead_days(self) -> int:
