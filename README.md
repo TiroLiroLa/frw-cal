@@ -59,9 +59,9 @@ O módulo **WeAct Studio 4.2" E-Paper (Preto/Branco/Vermelho - driver SSD1683)**
 No terminal do seu Raspberry Pi Zero 2W:
 
 ```bash
-# 1. Clone ou transfira a pasta do projeto para o Raspberry Pi
+# 1. Clone o repositório no Raspberry Pi
 cd ~/
-git clone https://github.com/seu-usuario/frw-cal.git # ou copie a pasta frw-cal
+git clone https://github.com/TiroLiroLa/frw-cal.git
 cd frw-cal
 
 # 2. Execute o instalador automatizado

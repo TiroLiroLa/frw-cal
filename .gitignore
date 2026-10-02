@@ -35,8 +35,9 @@ config/config.yaml
 data/*.json
 
 # Outputs
-output/
+output/*
 !output/.gitkeep
+!output/preview.png
 
 # IDE & OS
 .vscode/
