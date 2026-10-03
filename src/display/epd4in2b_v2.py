@@ -186,3 +186,5 @@ class EPD4in2B_V2(BaseDisplay):
         self.send_command(0x10)  # Deep sleep command
         self.send_data(0x03)     # Enter deep sleep mode 1
         epdconfig.delay_ms(100)
+        # Release SPI bus and GPIO handles during sleep to prevent resource lockups between cycles
+        epdconfig.module_exit(cleanup=False)

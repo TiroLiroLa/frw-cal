@@ -102,8 +102,43 @@ def spi_writebyte2(data):
             _SPI.writebytes(list(bdata[i : i + chunk_size]))
 
 
+def module_exit(cleanup=False):
+    global _SPI, _BACKEND, _RST_DEV, _DC_DEV, _BUSY_DEV, _CS_DEV, _GPIO
+
+    if _SPI is not None:
+        try:
+            _SPI.close()
+        except Exception:
+            pass
+        _SPI = None
+
+    if _BACKEND == "gpiozero":
+        for dev in [_RST_DEV, _DC_DEV, _BUSY_DEV, _CS_DEV]:
+            if dev is not None:
+                try:
+                    dev.close()
+                except Exception:
+                    pass
+        _RST_DEV = None
+        _DC_DEV = None
+        _BUSY_DEV = None
+        _CS_DEV = None
+    elif _BACKEND == "rpi_gpio":
+        if _GPIO is not None and cleanup:
+            try:
+                _GPIO.cleanup()
+            except Exception:
+                pass
+        _GPIO = None
+
+    _BACKEND = None
+
+
 def module_init(cleanup=False):
     global _SPI, _BACKEND, _RST_DEV, _DC_DEV, _BUSY_DEV, _CS_DEV, _GPIO, _MANUAL_CS, _IS_RPI
+
+    # Always clean up any handles from a previous cycle before initializing
+    module_exit(cleanup=cleanup)
 
     # 1. Initialize SPI
     try:
@@ -181,31 +216,3 @@ def module_init(cleanup=False):
     except Exception as e:
         logger.error(f"Failed to initialize GPIO pins: {e}")
         return -1
-
-
-def module_exit(cleanup=False):
-    global _SPI, _BACKEND, _RST_DEV, _DC_DEV, _BUSY_DEV, _CS_DEV, _GPIO
-
-    if _SPI:
-        try:
-            _SPI.close()
-        except Exception:
-            pass
-
-    if _BACKEND == "gpiozero":
-        try:
-            if _RST_DEV:
-                _RST_DEV.close()
-            if _DC_DEV:
-                _DC_DEV.close()
-            if _BUSY_DEV:
-                _BUSY_DEV.close()
-            if _CS_DEV:
-                _CS_DEV.close()
-        except Exception:
-            pass
-    elif _BACKEND == "rpi_gpio" and _GPIO and cleanup:
-        try:
-            _GPIO.cleanup()
-        except Exception:
-            pass
