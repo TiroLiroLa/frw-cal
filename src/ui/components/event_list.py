@@ -24,32 +24,17 @@ def render_event_list(
     width = x1 - x0
 
     font_title = get_font("bold", 14)
-    font_weather = get_font("bold", 12)
     font_badge = get_font("bold", 11)
     font_item_title = get_font("bold", 13)
     font_item_sub = get_font("bold", 11)
 
-    # 1. Section Header: "AGENDA" + Red Pill Accent + Weather
+    # 1. Section Header: "AGENDA" + Red Pill Accent
     header_y = y0 + 1
     # Red vertical accent bar
     canvas.draw_rounded_rectangle(
         (x0, header_y + 1, x0 + 4, header_y + 17), radius=2, fill="red"
     )
     canvas.draw_text((x0 + 10, header_y), "AGENDA", font=font_title, color="black")
-
-    # Weather info on top-right of agenda header
-    if weather:
-        w_desc = sanitize_text(weather.description)
-        w_text = f"{int(round(weather.temperature))}°C · {w_desc}"
-        bbox_w = font_weather.getbbox(w_text)
-        w_width = bbox_w[2] - bbox_w[0]
-        if w_width < 145:
-            canvas.draw_text(
-                (x1 - w_width - 2, header_y + 2),
-                w_text,
-                font=font_weather,
-                color="red",
-            )
 
     # Divider line under agenda header
     divider_y = header_y + 21

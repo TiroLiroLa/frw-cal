@@ -118,7 +118,7 @@ class Config:
     # Weather
     @property
     def weather_enabled(self) -> bool:
-        return self._data.get("weather", {}).get("enabled", True)
+        return self._data.get("weather", {}).get("enabled", False)
 
     @property
     def weather_latitude(self) -> float:
@@ -133,6 +133,16 @@ class Config:
         return self._data.get("weather", {}).get("city_name", "São Paulo")
 
     # Refresh
+    @property
+    def refresh_mode(self) -> str:
+        """'daily' (once a day at midnight) or 'interval' (every X minutes)."""
+        return self._data.get("refresh", {}).get("mode", "daily")
+
+    @property
+    def daily_time(self) -> str:
+        """Time of day for daily refresh in 'HH:MM' format. Default '00:00'."""
+        return self._data.get("refresh", {}).get("daily_time", "00:00")
+
     @property
     def refresh_interval_minutes(self) -> int:
         return self._data.get("refresh", {}).get("interval_minutes", 30)

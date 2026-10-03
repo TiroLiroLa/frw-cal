@@ -31,20 +31,35 @@ def signal_handler(signum, frame):
     _RUNNING = False
 
 
+def get_next_daily_target(daily_time_str: str = "00:00") -> datetime:
+    """Calculates the next datetime when the daily refresh should occur."""
+    now = datetime.now()
+    try:
+        parts = daily_time_str.split(":")
+        hour, minute = int(parts[0]), int(parts[1])
+    except Exception:
+        hour, minute = 0, 0
+    # Add a small buffer (5s) so the clock has safely ticked past the target minute
+    target = now.replace(hour=hour, minute=minute, second=5, microsecond=0)
+    if target <= now:
+        target += timedelta(days=1)
+    return target
+
+
 def run_cycle(config: Config, force_mock: bool = False):
     """Executes a single fetch, render, and display cycle."""
     now = datetime.now()
     today = now.date()
 
-    # Check active hours
-    if not (config.active_hours_start <= now.hour <= config.active_hours_end):
-        # Check if midnight update is enabled and we are at hour 0
-        if not (config.midnight_update and now.hour == 0 and now.minute < 30):
-            logger.info(
-                f"Current hour {now.hour} is outside active hours "
-                f"[{config.active_hours_start}-{config.active_hours_end}]. Skipping refresh."
-            )
-            return
+    # In interval mode, verify active hours (daily mode always executes when triggered)
+    if config.refresh_mode == "interval":
+        if not (config.active_hours_start <= now.hour <= config.active_hours_end):
+            if not (config.midnight_update and now.hour == 0 and now.minute < 30):
+                logger.info(
+                    f"Current hour {now.hour} is outside active hours "
+                    f"[{config.active_hours_start}-{config.active_hours_end}]. Skipping refresh."
+                )
+                return
 
     logger.info("=== Starting Calendar Refresh Cycle ===")
 
@@ -146,22 +161,46 @@ def main():
         return
 
     # Daemon mode loop
-    logger.info(
-        f"frw-cal daemon started. Refresh interval: {config.refresh_interval_minutes} minutes."
-    )
-    while _RUNNING:
-        try:
-            run_cycle(config, force_mock=force_mock)
-        except Exception as e:
-            logger.error(f"Error in refresh cycle: {e}", exc_info=True)
+    if config.refresh_mode == "daily":
+        logger.info(
+            f"frw-cal daemon started in DAILY mode. Refresh occurs once per day at {config.daily_time}."
+        )
+        while _RUNNING:
+            try:
+                run_cycle(config, force_mock=force_mock)
+            except Exception as e:
+                logger.error(f"Error in refresh cycle: {e}", exc_info=True)
 
-        # Sleep in small increments to be responsive to signals
-        sleep_seconds = config.refresh_interval_minutes * 60
-        logger.info(f"Sleeping for {config.refresh_interval_minutes} minutes...")
-        slept = 0
-        while _RUNNING and slept < sleep_seconds:
-            time.sleep(1)
-            slept += 1
+            target_dt = get_next_daily_target(config.daily_time)
+            delta = target_dt - datetime.now()
+            hours, remainder = divmod(int(delta.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            logger.info(
+                f"Next refresh scheduled for {target_dt.strftime('%Y-%m-%d %H:%M:%S')} "
+                f"(in {hours:02d}h {minutes:02d}m {seconds:02d}s). Sleeping..."
+            )
+
+            while _RUNNING:
+                remaining = (target_dt - datetime.now()).total_seconds()
+                if remaining <= 0:
+                    break
+                time.sleep(min(remaining, 5.0))
+    else:
+        logger.info(
+            f"frw-cal daemon started in INTERVAL mode. Refresh interval: {config.refresh_interval_minutes} minutes."
+        )
+        while _RUNNING:
+            try:
+                run_cycle(config, force_mock=force_mock)
+            except Exception as e:
+                logger.error(f"Error in refresh cycle: {e}", exc_info=True)
+
+            sleep_seconds = config.refresh_interval_minutes * 60
+            logger.info(f"Sleeping for {config.refresh_interval_minutes} minutes...")
+            slept = 0
+            while _RUNNING and slept < sleep_seconds:
+                time.sleep(1)
+                slept += 1
 
     logger.info("frw-cal daemon stopped.")
 

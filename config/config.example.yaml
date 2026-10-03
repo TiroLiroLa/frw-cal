@@ -66,20 +66,24 @@ calendar:
   lookahead_days: 14
 
 weather:
-  # Previsão do tempo simples (Open-Meteo API, gratuita e sem necessidade de chave de API)
-  enabled: true
+  # Previsão do tempo (opcional, desativada por padrão)
+  enabled: false
   latitude: -23.5505
   longitude: -46.6333
   city_name: "São Paulo"
   units: "celsius"
 
 refresh:
-  # Intervalo de atualização durante o dia (em minutos, mínimo recomendado: 15-30)
-  interval_minutes: 30
+  # Modo de atualização:
+  #  - "daily": Atualiza 1 vez ao dia (à meia-noite, quando o dia vira)
+  #  - "interval": Atualiza periodicamente a cada X minutos durante o dia
+  mode: "daily"
 
-  # Horários ativos para atualizar o e-paper (evita desgaste da tela de madrugada)
+  # Horário para a atualização diária (formato HH:MM, padrão: "00:00")
+  daily_time: "00:00"
+
+  # Configurações para o modo 'interval' (caso prefira atualizações periódicas):
+  interval_minutes: 30
   active_hours_start: 6
   active_hours_end: 23
-
-  # Atualização especial à meia-noite (muda o dia no grid)
   midnight_update: true
