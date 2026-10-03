@@ -95,48 +95,88 @@ def render_event_list(
         is_today = ev.is_today(current_date)
         is_tomorrow = ev.is_tomorrow(current_date)
 
-        # Format Badge
-        if ev.is_birthday:
-            badge_text = "ANIVERSÁRIO"
-            badge_color = "red"
-            badge_bg = True
-        elif ev.is_holiday:
-            badge_text = "FERIADO"
-            badge_color = "red"
-            badge_bg = True
-        elif is_today:
-            time_str = ev.start.strftime("%H:%M") if not ev.all_day else "DIA TODO"
-            badge_text = f"HOJE · {time_str}"
-            badge_color = "red"
-            badge_bg = True
+        # Format Badge: Day + Specific Time + Category
+        # 1. Day component
+        if is_today:
+            day_str = "HOJE"
         elif is_tomorrow:
-            time_str = ev.start.strftime("%H:%M") if not ev.all_day else "DIA TODO"
-            badge_text = f"AMANHÃ · {time_str}"
-            badge_color = "black"
-            badge_bg = False
+            day_str = "AMANHÃ"
         else:
             wd_short = WEEKDAYS_SHORT_PT[ev.start.weekday()]
-            time_str = ev.start.strftime("%H:%M") if not ev.all_day else "DIA TODO"
-            badge_text = f"{wd_short} {ev.start.day:02d}/{ev.start.month:02d} · {time_str}"
-            badge_color = "black"
-            badge_bg = False
+            day_str = f"{wd_short} {ev.start.day:02d}/{ev.start.month:02d}"
 
-        current_y = item_y
-        if badge_bg:
+        # 2. Category component
+        cat_str = ""
+        if ev.is_birthday:
+            cat_str = "ANIVERSÁRIO"
+        elif ev.is_holiday:
+            cat_str = "FERIADO"
+        elif ev.calendar_name and ev.calendar_name.lower() not in ["primary", "principal", "default"] and "@" not in ev.calendar_name:
+            cat_str = ev.calendar_name.upper()
+
+        # 3. Time component (if event has a specific time)
+        time_str = ""
+        if not ev.all_day:
+            st = ev.start.strftime("%H:%M")
+            et = ev.end.strftime("%H:%M")
+            if et != st and et != "23:59" and (ev.end - ev.start).total_seconds() < 86400 and not cat_str:
+                time_str = f"{st} - {et}"
+            else:
+                time_str = st
+
+        # Combine components
+        parts = [day_str]
+        if time_str:
+            parts.append(time_str)
+        if cat_str:
+            parts.append(cat_str)
+        elif ev.all_day and not cat_str:
+            parts.append("DIA TODO")
+
+        badge_text = " · ".join(parts)
+
+        # Ensure badge fits comfortably within width (width = x1 - x0)
+        max_badge_w = width - 14
+        bbox_b = font_badge.getbbox(badge_text)
+        if (bbox_b[2] - bbox_b[0]) > max_badge_w:
+            # Fallback 1: if time has range " - ", reduce to start time only
+            if " - " in time_str:
+                time_str = st
+                parts = [day_str, time_str]
+                if cat_str:
+                    parts.append(cat_str)
+                badge_text = " · ".join(parts)
+                bbox_b = font_badge.getbbox(badge_text)
+
+            # Fallback 2: remove weekday prefix if not today/tomorrow
+            if (bbox_b[2] - bbox_b[0]) > max_badge_w and not (is_today or is_tomorrow):
+                day_str = f"{ev.start.day:02d}/{ev.start.month:02d}"
+                parts[0] = day_str
+                badge_text = " · ".join(parts)
+                bbox_b = font_badge.getbbox(badge_text)
+
+            # Fallback 3: truncate if still overflowing
+            badge_text = truncate_to_width(badge_text, font_badge, max_badge_w)
             bbox_b = font_badge.getbbox(badge_text)
-            bw = (bbox_b[2] - bbox_b[0]) + 10
-            bh = 17
-            badge_rect = (x0, current_y, x0 + bw, current_y + bh)
-            canvas.draw_rounded_rectangle(badge_rect, radius=4, fill=badge_color)
+
+        bw = (bbox_b[2] - bbox_b[0]) + 10
+        bh = 17
+        current_y = item_y
+        badge_rect = (x0, current_y, x0 + bw, current_y + bh)
+
+        # Style: Red solid pill for birthdays, holidays, and today's events; Outlined pill for future regular events
+        if ev.is_birthday or ev.is_holiday or is_today:
+            canvas.draw_rounded_rectangle(badge_rect, radius=4, fill="red")
             canvas.draw_text(
                 (x0 + 5, current_y + 2), badge_text, font=font_badge, color="white"
             )
-            current_y += bh + 4
         else:
+            canvas.draw_rounded_rectangle(badge_rect, radius=4, outline="black", width=1)
             canvas.draw_text(
-                (x0, current_y), badge_text, font=font_badge, color=badge_color
+                (x0 + 5, current_y + 2), badge_text, font=font_badge, color="black"
             )
-            current_y += 16
+
+        current_y += bh + 4
 
         # Title: wrapped into up to 2 lines if needed
         max_title_lines = 2 if item_h >= 45 else 1

@@ -209,6 +209,21 @@ class GoogleCalendarProvider(BaseCalendarProvider):
                 logger.warning(f"Could not fetch events from calendar '{cal_name}' ({cal_id}): {e}")
 
         if fetched_any:
+            # Deduplicate events occurring across multiple calendars (e.g., primary + birthdays)
+            unique_events: List[CalendarEvent] = []
+            seen_indices = {}
+            for ev in events:
+                key = (ev.summary.strip().lower(), ev.start.date())
+                if key not in seen_indices:
+                    seen_indices[key] = len(unique_events)
+                    unique_events.append(ev)
+                else:
+                    # If current duplicate has richer tags (birthday/holiday), keep the richer one
+                    existing_idx = seen_indices[key]
+                    if (ev.is_birthday or ev.is_holiday) and not (unique_events[existing_idx].is_birthday or unique_events[existing_idx].is_holiday):
+                        unique_events[existing_idx] = ev
+
+            events = unique_events
             self._save_cache(events)
             events.sort(key=lambda ev: ev.start)
             return events
