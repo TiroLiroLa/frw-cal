@@ -17,16 +17,16 @@ def render_event_list(
     events: List[CalendarEvent],
     weather: Optional[WeatherInfo],
     rect: Tuple[int, int, int, int],
-    max_events: int = 4,
+    max_events: int = 5,
 ):
     """Renders the agenda and upcoming appointments list with large, bold typography."""
     x0, y0, x1, y1 = rect
     width = x1 - x0
 
-    font_title = get_font("bold", 14)
-    font_badge = get_font("bold", 11)
-    font_item_title = get_font("bold", 13)
-    font_item_sub = get_font("bold", 11)
+    font_title = get_font("bold", 15)
+    font_badge = get_font("bold", 12)
+    font_item_title = get_font("bold", 15)
+    font_item_sub = get_font("bold", 12)
 
     # 1. Section Header: "AGENDA" + Red Pill Accent
     header_y = y0 + 1
@@ -37,19 +37,19 @@ def render_event_list(
     canvas.draw_text((x0 + 10, header_y), "AGENDA", font=font_title, color="black")
 
     # Divider line under agenda header
-    divider_y = header_y + 21
+    divider_y = header_y + 20
     canvas.draw_line((x0, divider_y, x1, divider_y), color="black", width=1)
 
-    # 2. Filter upcoming events (today and future)
+    # 2. Filter upcoming events (today and future, excluding holidays)
     upcoming: List[CalendarEvent] = [
-        ev for ev in events if ev.end.date() >= current_date
+        ev for ev in events if ev.end.date() >= current_date and not ev.is_holiday
     ]
     upcoming.sort(key=lambda ev: ev.start)
     display_events = upcoming[:max_events]
 
     # 3. Render event items
-    start_y = divider_y + 6
-    avail_height = (y1 - 4) - start_y
+    start_y = divider_y + 4
+    avail_height = (y1 - 2) - start_y
 
     if not display_events:
         # Empty state message
@@ -71,8 +71,8 @@ def render_event_list(
         return
 
     n_events = len(display_events)
-    # Optimized spacing for up to 4 events
-    item_h = min(avail_height // n_events, 65)
+    # Dynamic spacing: fits 1 to 5 events evenly
+    item_h = min(avail_height // n_events, 85)
 
     for idx, ev in enumerate(display_events):
         item_y = start_y + idx * item_h
@@ -145,40 +145,35 @@ def render_event_list(
             bbox_b = font_badge.getbbox(badge_text)
 
         bw = (bbox_b[2] - bbox_b[0]) + 10
-        bh = 17
+        bh = 16
         current_y = item_y
         badge_rect = (x0, current_y, x0 + bw, current_y + bh)
 
-        # Style: Red solid pill for birthdays, holidays, and today's events; Outlined pill for future regular events
-        if ev.is_birthday or ev.is_holiday or is_today:
-            canvas.draw_rounded_rectangle(badge_rect, radius=4, fill="red")
-            canvas.draw_text(
-                (x0 + 5, current_y + 2), badge_text, font=font_badge, color="white"
-            )
-        else:
-            canvas.draw_rounded_rectangle(badge_rect, radius=4, outline="black", width=1)
-            canvas.draw_text(
-                (x0 + 5, current_y + 2), badge_text, font=font_badge, color="black"
-            )
+        # Style: Solid RED pill for all events as requested
+        canvas.draw_rounded_rectangle(badge_rect, radius=3, fill="red")
+        canvas.draw_text(
+            (x0 + 5, current_y + 1), badge_text, font=font_badge, color="white"
+        )
 
-        current_y += bh + 4
+        current_y += bh + 2
 
         # Title: wrapped into up to 2 lines if needed
-        max_title_lines = 2 if item_h >= 45 else 1
+        max_title_lines = 2 if item_h >= 50 else 1
         title_lines = wrap_text_to_width(
             ev.summary, font_item_title, max_width_px=width - 4, max_lines=max_title_lines
         )
+        line_spacing = 14 if item_h <= 55 else 16
         for line in title_lines:
             canvas.draw_text(
                 (x0, current_y), line, font=font_item_title, color="black"
             )
-            current_y += 15
+            current_y += line_spacing
 
         # Location if present and fits without colliding with separator
-        if ev.location and (current_y + 14 < item_y + item_h - 4):
+        if ev.location and (current_y + 12 < item_y + item_h - 2):
             loc = truncate_to_width(ev.location, font_item_sub, max_width_px=width - 4)
             canvas.draw_text(
-                (x0, current_y + 1), loc, font=font_item_sub, color="black"
+                (x0, current_y), loc, font=font_item_sub, color="black"
             )
 
         # Separator line between items (except last item)

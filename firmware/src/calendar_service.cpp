@@ -263,6 +263,7 @@ bool CalendarService::fetchGoogleEvents(const String& accessToken, const String&
                          sumLower.indexOf("bday") >= 0);
 
         ev.isHoliday = (calendarId.indexOf("holiday") >= 0 ||
+                        calendarId.indexOf("feriado") >= 0 ||
                         sumLower.indexOf("feriado") >= 0 ||
                         sumLower.indexOf("holiday") >= 0);
 
@@ -379,13 +380,33 @@ bool CalendarService::fetchEvents(int currentYear, int currentMonth, int current
     std::vector<String> targetCals;
     getUserCalendars(token, targetCals);
 
-    // Fallback to config.h if discovery returned nothing
-    if (targetCals.empty()) {
-        for (int i = 0; i < MAX_CALENDARS; i++) {
-            if (strlen(GOOGLE_CALENDARS[i]) > 0) {
-                targetCals.push_back(String(GOOGLE_CALENDARS[i]));
+    // Ensure any calendars explicitly specified in config.h are also included
+    for (int i = 0; i < MAX_CALENDARS; i++) {
+        if (strlen(GOOGLE_CALENDARS[i]) > 0) {
+            String cId = String(GOOGLE_CALENDARS[i]);
+            bool exists = false;
+            for (const auto& existing : targetCals) {
+                if (existing.equalsIgnoreCase(cId)) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                targetCals.push_back(cId);
             }
         }
+    }
+
+    // Ensure contacts/birthdays calendar is queried if not already in list
+    bool hasContacts = false;
+    for (const auto& cid : targetCals) {
+        if (cid.indexOf("contacts") >= 0) {
+            hasContacts = true;
+            break;
+        }
+    }
+    if (!hasContacts) {
+        targetCals.push_back("addressbook#contacts@group.v.calendar.google.com");
     }
 
     bool anySuccess = false;

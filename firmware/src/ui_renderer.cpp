@@ -119,18 +119,20 @@ void UIRenderer::renderMonthGrid(int year, int month, int day, const std::vector
             bool is_sunday = (col_idx == 0);
 
             // Check if day has events
-            bool has_event = false;
+            bool has_regular_event = false;
             bool is_birthday = false;
             bool is_holiday = false;
 
             for (const auto& ev : events) {
                 if (ev.isOnDate(year, month, day_num)) {
-                    has_event = true;
-                    if (ev.isBirthday) is_birthday = true;
-                    if (ev.isHoliday) is_holiday = true;
+                    if (ev.isHoliday) {
+                        is_holiday = true;
+                    } else {
+                        has_regular_event = true;
+                        if (ev.isBirthday) is_birthday = true;
+                    }
                 }
             }
-            bool is_special = is_birthday || is_holiday || is_sunday;
 
             char day_text[8];
             snprintf(day_text, sizeof(day_text), "%d", day_num);
@@ -150,16 +152,21 @@ void UIRenderer::renderMonthGrid(int year, int month, int day, const std::vector
                 // 1. TODAY: Solid RED rounded box with white text
                 canvas.fillRoundRect(bx0, by0, bx1, by1, 4, COLOR_RED);
                 canvas.drawText(text_x, text_y, day_text, Font_LiberationSans_Bold_14, COLOR_WHITE);
-            } else if (has_event) {
-                // 2. EVENT DAY: Outlined box around number
-                Color outline_color = is_special ? COLOR_RED : COLOR_BLACK;
-                Color text_color = is_special ? COLOR_RED : COLOR_BLACK;
-                canvas.drawRoundRect(bx0, by0, bx1, by1, 4, outline_color, 2);
-                canvas.drawText(text_x, text_y, day_text, Font_LiberationSans_Bold_14, text_color);
+            } else if (has_regular_event) {
+                // 2. REGULAR EVENT DAY: All events outlined in RED with RED number
+                canvas.drawRoundRect(bx0, by0, bx1, by1, 4, COLOR_RED, 2);
+                canvas.drawText(text_x, text_y, day_text, Font_LiberationSans_Bold_14, COLOR_RED);
             } else {
-                // 3. NORMAL DAY
+                // 3. NORMAL DAY or HOLIDAY ONLY: Clean bold number (Red for Sunday, Black otherwise)
                 Color text_color = is_sunday ? COLOR_RED : COLOR_BLACK;
                 canvas.drawText(text_x, text_y, day_text, Font_LiberationSans_Bold_14, text_color);
+            }
+
+            // Black dot at top-right corner of the day block for holidays
+            if (is_holiday && !is_today) {
+                int dot_x = text_x + tw;
+                int dot_y = text_y - 3;
+                canvas.fillCircle(dot_x, dot_y, 3, COLOR_BLACK);
             }
         }
     }
@@ -186,13 +193,14 @@ void UIRenderer::renderEventList(int year, int month, int day, const std::vector
     canvas.drawText(x0 + 10, header_y, "AGENDA", Font_LiberationSans_Bold_18, COLOR_BLACK);
 
     // Divider line under agenda header
-    int divider_y = header_y + 23;
+    int divider_y = header_y + 20;
     canvas.drawLine(x0, divider_y, x1, divider_y, COLOR_BLACK, 1);
 
-    // 2. Filter upcoming events (today and future)
+    // 2. Filter upcoming events (today and future, excluding holidays)
     int todayCode = year * 10000 + month * 100 + day;
     std::vector<CalendarEvent> upcoming;
     for (const auto& ev : events) {
+        if (ev.isHoliday) continue;
         int endCode = ev.endYear * 10000 + ev.endMonth * 100 + ev.endDay;
         if (endCode >= todayCode) {
             upcoming.push_back(ev);
@@ -208,8 +216,8 @@ void UIRenderer::renderEventList(int year, int month, int day, const std::vector
     }
 
     // 3. Render event items
-    int start_y = divider_y + 6;
-    int avail_height = (y1 - 4) - start_y;
+    int start_y = divider_y + 4;
+    int avail_height = (y1 - 2) - start_y;
 
     if (upcoming.empty()) {
         int empty_y = start_y + 40;
@@ -219,7 +227,8 @@ void UIRenderer::renderEventList(int year, int month, int day, const std::vector
     }
 
     int n_events = upcoming.size();
-    int item_h = std::min(avail_height / n_events, 65);
+    // Dynamic spacing: fits 1 to 5 events evenly
+    int item_h = std::min(avail_height / n_events, 85);
 
     for (int idx = 0; idx < n_events; idx++) {
         const auto& ev = upcoming[idx];
@@ -272,33 +281,31 @@ void UIRenderer::renderEventList(int year, int month, int day, const std::vector
 
         int text_w = getTextWidth(badge_text.c_str(), Font_LiberationSans_Bold_12);
         int bw = text_w + 10;
-        int bh = 18;
+        int bh = 16;
         int current_y = item_y;
 
-        // Red solid pill for birthdays, holidays, and today's events; Outlined pill for future regular events
-        if (ev.isBirthday || ev.isHoliday || is_today) {
-            canvas.fillRoundRect(x0, current_y, x0 + bw, current_y + bh, 4, COLOR_RED);
-            canvas.drawText(x0 + 5, current_y + 2, badge_text.c_str(), Font_LiberationSans_Bold_12, COLOR_WHITE);
-        } else {
-            canvas.drawRoundRect(x0, current_y, x0 + bw, current_y + bh, 4, COLOR_BLACK, 1);
-            canvas.drawText(x0 + 5, current_y + 2, badge_text.c_str(), Font_LiberationSans_Bold_12, COLOR_BLACK);
-        }
+        // Solid RED pill for all events as requested
+        canvas.fillRoundRect(x0, current_y, x0 + bw, current_y + bh, 3, COLOR_RED);
+        canvas.drawText(x0 + 5, current_y + 1, badge_text.c_str(), Font_LiberationSans_Bold_12, COLOR_WHITE);
 
-        current_y += bh + 4;
+        current_y += bh + 2;
 
         // Title: wrapped into up to 2 lines
-        int max_title_lines = (item_h >= 45) ? 2 : 1;
+        int max_title_lines = (item_h >= 50) ? 2 : 1;
         std::vector<String> title_lines;
-        canvas.wrapText(ev.summary.c_str(), Font_LiberationSans_Bold_14, width - 4, max_title_lines, title_lines);
+        const FontDef& titleFont = (item_h > 55) ? Font_LiberationSans_Bold_16 : Font_LiberationSans_Bold_14;
+        int line_spacing = (item_h > 55) ? 17 : 14;
+
+        canvas.wrapText(ev.summary.c_str(), titleFont, width - 4, max_title_lines, title_lines);
         for (const auto& line : title_lines) {
-            canvas.drawText(x0, current_y, line.c_str(), Font_LiberationSans_Bold_14, COLOR_BLACK);
-            current_y += 16;
+            canvas.drawText(x0, current_y, line.c_str(), titleFont, COLOR_BLACK);
+            current_y += line_spacing;
         }
 
         // Location if present and fits
-        if (ev.location.length() > 0 && (current_y + 12 < item_y + item_h - 4)) {
+        if (ev.location.length() > 0 && (current_y + 12 < item_y + item_h - 2)) {
             String loc = canvas.truncateToWidth(ev.location.c_str(), Font_LiberationSans_Bold_12, width - 4);
-            canvas.drawText(x0, current_y + 1, loc.c_str(), Font_LiberationSans_Bold_12, COLOR_BLACK);
+            canvas.drawText(x0, current_y, loc.c_str(), Font_LiberationSans_Bold_12, COLOR_BLACK);
         }
 
         // Separator line between items
@@ -329,6 +336,6 @@ void UIRenderer::render(int year, int month, int day, int hour, int minute,
 
     // 2. Right column
     Serial.println("[UI] Desenhando lista de eventos...");
-    renderEventList(year, month, day, events, 4);
+    renderEventList(year, month, day, events, 5);
     Serial.println("[UI] Renderização finalizada!");
 }

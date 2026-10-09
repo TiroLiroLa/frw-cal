@@ -54,14 +54,16 @@ def render_month_grid(
                 if start_d <= check_d <= end_d:
                     if d not in month_events:
                         month_events[d] = {
-                            "has_event": True,
+                            "has_regular_event": False,
                             "has_birthday": False,
                             "has_holiday": False,
                         }
-                    if ev.is_birthday:
-                        month_events[d]["has_birthday"] = True
                     if ev.is_holiday:
                         month_events[d]["has_holiday"] = True
+                    else:
+                        month_events[d]["has_regular_event"] = True
+                        if ev.is_birthday:
+                            month_events[d]["has_birthday"] = True
             except ValueError:
                 break
 
@@ -87,10 +89,11 @@ def render_month_grid(
             col_cx = int(x0 + col_idx * col_w + col_w / 2.0)
             is_today = (day_num == current_date.day)
             is_sunday = (col_idx == 0)
-            has_event = day_num in month_events
-            is_birthday = has_event and month_events[day_num]["has_birthday"]
-            is_holiday = has_event and month_events[day_num]["has_holiday"]
-            is_special = is_birthday or is_holiday or is_sunday
+            
+            day_info = month_events.get(day_num, {})
+            has_regular = day_info.get("has_regular_event", False)
+            is_birthday = day_info.get("has_birthday", False)
+            is_holiday = day_info.get("has_holiday", False)
 
             day_text = str(day_num)
             bbox = font_day_bold.getbbox(day_text)
@@ -112,15 +115,20 @@ def render_month_grid(
                 # 1. TODAY: Solid RED rounded box with white text
                 canvas.draw_rounded_rectangle(box_rect, radius=4, fill="red")
                 canvas.draw_text(text_pos, day_text, font=font_day_bold, color="white")
-            elif has_event:
-                # 2. EVENT DAY: Outlined box around the number (Red for special days, Black for routine)
-                outline_color = "red" if is_special else "black"
-                text_color = "red" if is_special else "black"
+            elif has_regular:
+                # 2. EVENT DAY: All events outlined in RED with RED number
                 canvas.draw_rounded_rectangle(
-                    box_rect, radius=4, outline=outline_color, width=2
+                    box_rect, radius=4, outline="red", width=2
                 )
-                canvas.draw_text(text_pos, day_text, font=font_day_bold, color=text_color)
+                canvas.draw_text(text_pos, day_text, font=font_day_bold, color="red")
             else:
-                # 3. NORMAL DAY: Clean bold number
+                # 3. NORMAL DAY or HOLIDAY ONLY: Clean bold number (Red for Sunday, Black otherwise)
                 text_color = "red" if is_sunday else "black"
                 canvas.draw_text(text_pos, day_text, font=font_day_bold, color=text_color)
+
+            # Black dot at top-right corner of the day block for holidays
+            if is_holiday and not is_today:
+                dot_r = 3
+                dot_x = text_pos[0] + tw
+                dot_y = text_pos[1] - 3
+                canvas.draw_circle((dot_x, dot_y), radius=dot_r, fill="black")

@@ -49,8 +49,8 @@ static const char* GOOGLE_CALENDARS[MAX_CALENDARS] = {
 #define ICAL_URL ""
 
 // 7. Configurações de exibição
-#define MAX_UPCOMING_EVENTS 4
-#define LOOKAHEAD_DAYS      14
+#define MAX_UPCOMING_EVENTS 5
+#define LOOKAHEAD_DAYS      90
 #define DISPLAY_ROTATION    0    // 0 ou 180 (caso montado de ponta cabeça)
 
 // 8. Modo de Atualização e Economia de Bateria (Deep Sleep)

@@ -60,10 +60,10 @@ calendar:
     # - "https://calendar.google.com/calendar/ical/seu_email%40gmail.com/private-xxxx/basic.ics"
 
   # Quantidade máxima de eventos para listar no painel lateral
-  max_upcoming_events: 4
+  max_upcoming_events: 5
 
   # Dias à frente para buscar eventos futuros
-  lookahead_days: 14
+  lookahead_days: 90
 
 weather:
   # Previsão do tempo (opcional, desativada por padrão)

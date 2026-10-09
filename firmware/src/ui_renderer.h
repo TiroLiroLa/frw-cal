@@ -20,7 +20,7 @@ private:
     void renderHeader(int year, int month, int day, int weekday);
     void renderMonthGrid(int year, int month, int day, const std::vector<CalendarEvent>& events);
     void renderStatusBar(int hour, int minute);
-    void renderEventList(int year, int month, int day, const std::vector<CalendarEvent>& events, int maxEvents);
+    void renderEventList(int year, int month, int day, const std::vector<CalendarEvent>& events, int maxEvents = 5);
 
     static int getDaysInMonth(int year, int month);
     static int getDayOfWeek(int year, int month, int day); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday

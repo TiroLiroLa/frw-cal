@@ -68,21 +68,22 @@ bool syncTime() {
 
 uint64_t calculateSleepSeconds(const struct tm& current_tm) {
 #if REFRESH_MODE == REFRESH_MODE_DAILY
-    // Daily mode: Sleep until DAILY_REFRESH_HOUR:DAILY_REFRESH_MINUTE (e.g. 00:00:05)
+    // Daily mode: Sleep until DAILY_REFRESH_HOUR:DAILY_REFRESH_MINUTE (e.g. 00:00:15)
     struct tm target_tm = current_tm;
     target_tm.tm_hour = DAILY_REFRESH_HOUR;
     target_tm.tm_min = DAILY_REFRESH_MINUTE;
-    target_tm.tm_sec = 5; // 5 seconds buffer past midnight
+    target_tm.tm_sec = 15; // 15 seconds buffer past midnight to ensure clock is firmly into the next day
 
     time_t cur_sec = mktime(const_cast<struct tm*>(&current_tm));
     time_t target_sec = mktime(&target_tm);
 
     if (target_sec <= cur_sec) {
-        // Target is tomorrow
+        // Target time has already passed today -> schedule for tomorrow
         target_sec += 86400;
     }
     uint64_t diff = target_sec - cur_sec;
-    if (diff < 60) diff = 86400; // safety
+    // Safety minimum sleep (5s) to prevent zero or negative sleep timers
+    if (diff < 5) diff = 5;
     return diff;
 #else
     // Interval mode
@@ -93,12 +94,34 @@ uint64_t calculateSleepSeconds(const struct tm& current_tm) {
 #if LIGHT_ENABLED
 void handleLightWakeup() {
     Serial.println("\n[Light] >>> Acordado pelo botão de leitura sob demanda! <<<");
+
+    // Verifica se é um toque longo (> 2.5s) para forçar atualização do calendário
+    unsigned long pressStart = millis();
+    bool forceSync = false;
+    while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+        delay(50);
+        if (millis() - pressStart >= 2500) {
+            forceSync = true;
+            break;
+        }
+    }
+
+    if (forceSync) {
+        Serial.println("[Light] Pressionamento longo detectado! Forçando sincronização da agenda...");
+        // Aguarda soltar o botão antes de iniciar o processo de sincronização
+        while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+            delay(50);
+        }
+        return; // Retorna para que setup() continue a execução normal de atualização
+    }
+
+    // Toque rápido: Acende a iluminação de leitura
     pinMode(LIGHT_PIN_LED, OUTPUT);
     digitalWrite(LIGHT_PIN_LED, HIGH);
     Serial.printf("[Light] LEDs acesos por até %d segundos...\n", LIGHT_TIMEOUT_SECONDS);
 
-    // Aguarda soltar o botão inicialmente (debounce da pressão)
-    delay(250);
+    // Debounce inicial
+    delay(200);
 
     // Monitora o tempo e permite desligar antes com um segundo toque (toggle)
     unsigned long startMs = millis();
@@ -117,8 +140,9 @@ void handleLightWakeup() {
     digitalWrite(LIGHT_PIN_LED, LOW);
     Serial.println("[Light] LEDs apagados.");
 
-    // Aguarda garantir que o botão esteja solto antes de voltar a dormir
-    while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+    // Aguarda soltar o botão com timeout de segurança de 2s para evitar qualquer travamento
+    unsigned long releaseStart = millis();
+    while (digitalRead(LIGHT_PIN_BUTTON) == LOW && (millis() - releaseStart) < 2000) {
         delay(50);
     }
 
@@ -135,10 +159,12 @@ void handleLightWakeup() {
     Serial.println("==============================================\n");
     Serial.flush();
 
-    // Reativa wakeup pelo botão (EXT0 quando nível LOW) e pelo timer
+    // Mantém domínio de periféricos RTC ativo para manter o pull-up ligado em Deep Sleep
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
     pinMode(LIGHT_PIN_BUTTON, INPUT_PULLUP);
     rtc_gpio_pullup_en((gpio_num_t)LIGHT_PIN_BUTTON);
     rtc_gpio_pulldown_dis((gpio_num_t)LIGHT_PIN_BUTTON);
+    rtc_gpio_hold_en((gpio_num_t)LIGHT_PIN_BUTTON);
     esp_sleep_enable_ext0_wakeup((gpio_num_t)LIGHT_PIN_BUTTON, 0);
     esp_sleep_enable_timer_wakeup(sleepSec * 1000000ULL);
     esp_deep_sleep_start();
@@ -157,15 +183,16 @@ void setup() {
     Serial.printf("[Power] Motivo de inicialização: %d\n", wakeup_reason);
 
 #if LIGHT_ENABLED
-    // Garante estado inicial dos pinos de luz e botão
+    // Libera o hold do pino para uso em modo acordado
+    rtc_gpio_hold_dis((gpio_num_t)LIGHT_PIN_BUTTON);
     pinMode(LIGHT_PIN_LED, OUTPUT);
     digitalWrite(LIGHT_PIN_LED, LOW);
     pinMode(LIGHT_PIN_BUTTON, INPUT_PULLUP);
 
-    // Se acordou especificamente pelo botão de leitura, acende a luz sem religar Wi-Fi/E-Paper
+    // Se acordou pelo botão de leitura:
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
         handleLightWakeup();
-        return;
+        // Se handleLightWakeup() retornou, foi um toque longo (> 2.5s) para forçar sincronização!
     }
 #endif
 
@@ -237,7 +264,14 @@ void setup() {
     }
 
     // 8. Modo Deep Sleep ultra-econômico
-    uint64_t sleepSec = calculateSleepSeconds(timeinfo);
+    time_t sleepNow = time(nullptr);
+    struct tm sleepTimeinfo = {0};
+    if (sleepNow >= 1700000000) {
+        localtime_r(&sleepNow, &sleepTimeinfo);
+    } else {
+        sleepTimeinfo = timeinfo;
+    }
+    uint64_t sleepSec = calculateSleepSeconds(sleepTimeinfo);
     uint32_t hours = sleepSec / 3600;
     uint32_t minutes = (sleepSec % 3600) / 60;
     uint32_t seconds = sleepSec % 60;
@@ -248,9 +282,12 @@ void setup() {
     Serial.flush();
 
 #if LIGHT_ENABLED
-    // Habilita wakeup por interrupção do botão de leitura (GPIO ligado ao GND quando pressionado)
+    // Mantém o domínio RTC_PERIPH ativo para manter o pull-up ligado em Deep Sleep
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+    pinMode(LIGHT_PIN_BUTTON, INPUT_PULLUP);
     rtc_gpio_pullup_en((gpio_num_t)LIGHT_PIN_BUTTON);
     rtc_gpio_pulldown_dis((gpio_num_t)LIGHT_PIN_BUTTON);
+    rtc_gpio_hold_en((gpio_num_t)LIGHT_PIN_BUTTON);
     esp_sleep_enable_ext0_wakeup((gpio_num_t)LIGHT_PIN_BUTTON, 0);
 #endif
 

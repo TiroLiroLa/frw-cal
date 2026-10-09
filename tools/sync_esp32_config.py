@@ -101,8 +101,8 @@ def main():
 
     # 4. Refresh & display settings
     rotation = yaml_data.get("display", {}).get("rotation", 0)
-    max_events = yaml_data.get("calendar", {}).get("max_upcoming_events", 4)
-    lookahead = yaml_data.get("calendar", {}).get("lookahead_days", 14)
+    max_events = yaml_data.get("calendar", {}).get("max_upcoming_events", 5)
+    lookahead = yaml_data.get("calendar", {}).get("lookahead_days", 90)
     
     refresh_mode_str = yaml_data.get("refresh", {}).get("mode", "daily")
     refresh_mode_def = "REFRESH_MODE_DAILY" if refresh_mode_str == "daily" else "REFRESH_MODE_INTERVAL"
