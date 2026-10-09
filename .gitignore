@@ -30,6 +30,12 @@ env/
 config/credentials.json
 config/token.json
 config/config.yaml
+firmware/include/config.h
+
+# Embedded & PlatformIO
+.pio/
+firmware/.pio/
+
 
 # Data caches
 data/*.json

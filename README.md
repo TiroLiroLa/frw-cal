@@ -1,8 +1,13 @@
 # 🗓️ Smart Calendar (frw-cal)
 
-Sistema de **calendário inteligente com tela e-Paper (tinta eletrônica)** de 4.2 polegadas (Preto, Branco e Vermelho) da **WeAct Studio**, acionado por um **Raspberry Pi Zero 2W** e integrado ao **Google Agenda (Google Calendar)**.
+Sistema de **calendário inteligente com tela e-Paper (tinta eletrônica)** de 4.2 polegadas (Preto, Branco e Vermelho) da **WeAct Studio**, com suporte nativo tanto para **Raspberry Pi Zero 2W** quanto para **NodeMCU-32S (ESP32)** integrado ao **Google Agenda (Google Calendar)**.
 
 ![Preview do Calendário](output/preview.png)
+
+> [!TIP]
+> **Procurando o firmware para NodeMCU-32S (ESP32)?**
+> Acesse o diretório [firmware/](firmware/) para o código C++ autônomo (compatível com PlatformIO e Arduino IDE) com sincronização automática de credenciais via `python3 tools/sync_esp32_config.py`.
+
 
 ---
 
