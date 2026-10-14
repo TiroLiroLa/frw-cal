@@ -35,40 +35,27 @@ VpsCheckinResult VpsClient::checkin(
     WireGuard wg;
     bool wgActive = false;
     AppLog::log("[VPS] Iniciando túnel WireGuard (Oracle VPN)...");
-    wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
+    wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_SUBNET, WIREGUARD_GATEWAY, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
     if (wgActive) {
-        AppLog::logf("[VPS] WireGuard conectado com IP %s!", WIREGUARD_LOCAL_IP.toString().c_str());
+        unsigned long wgStart = millis();
+        while (!wg.is_connected() && (millis() - wgStart) < 3000) {
+            delay(100);
+        }
+        if (wg.is_connected()) {
+            AppLog::logf("[VPS] WireGuard conectado com sucesso! Handshake ativo no IP %s!", WIREGUARD_LOCAL_IP.toString().c_str());
+        } else {
+            AppLog::log("[VPS] Aviso: Handshake do WireGuard não respondeu em 3s, tentando conexão...");
+        }
         endpoint = "http://10.8.0.1:8000/api/checkin";
     } else {
-        AppLog::log("[VPS] Falha ao conectar WireGuard, tentando endpoint padrão...");
+        AppLog::log("[VPS] Falha ao iniciar WireGuard, tentando endpoint padrão...");
         if (!endpoint.endsWith("/")) endpoint += "/";
         endpoint += "api/checkin";
     }
-    delay(200);
 #else
     if (!endpoint.endsWith("/")) endpoint += "/";
     endpoint += "api/checkin";
 #endif
-
-    AppLog::logf("[VPS] Enviando check-in para %s...", endpoint.c_str());
-
-    HTTPClient http;
-    WiFiClient client;
-    WiFiClientSecure secureClient;
-    bool isHttps = endpoint.startsWith("https://");
-
-    if (isHttps) {
-        secureClient.setInsecure();
-        http.begin(secureClient, endpoint);
-    } else {
-        http.begin(client, endpoint);
-    }
-
-    http.setTimeout(5000); // 5s timeout max
-    http.addHeader("Content-Type", "application/json");
-    if (apiKey.length() > 0) {
-        http.addHeader("X-API-Key", apiKey);
-    }
 
     JsonDocument doc;
     doc["device_id"] = "frw-cal-nodemcu";
@@ -88,10 +75,44 @@ VpsCheckinResult VpsClient::checkin(
     String requestBody;
     serializeJson(doc, requestBody);
 
-    int httpCode = http.POST(requestBody);
+    int httpCode = -1;
+    String payload = "";
+
+    for (int attempt = 1; attempt <= 3; attempt++) {
+        AppLog::logf("[VPS] Enviando check-in (tentativa %d/3) para %s...", attempt, endpoint.c_str());
+
+        HTTPClient http;
+        WiFiClient client;
+        WiFiClientSecure secureClient;
+        bool isHttps = endpoint.startsWith("https://");
+
+        if (isHttps) {
+            secureClient.setInsecure();
+            http.begin(secureClient, endpoint);
+        } else {
+            http.begin(client, endpoint);
+        }
+
+        http.setTimeout(8000);
+        http.addHeader("Content-Type", "application/json");
+        if (apiKey.length() > 0) {
+            http.addHeader("X-API-Key", apiKey);
+        }
+
+        httpCode = http.POST(requestBody);
+
+        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
+            payload = http.getString();
+            http.end();
+            break;
+        }
+
+        AppLog::logf("[VPS] Tentativa %d falhou (HTTP %d)", attempt, httpCode);
+        http.end();
+        if (attempt < 3) delay(800);
+    }
 
     if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_CREATED) {
-        String payload = http.getString();
         AppLog::logf("[VPS] Resposta recebida (%d bytes)", payload.length());
 
         JsonDocument respDoc;
@@ -113,13 +134,12 @@ VpsCheckinResult VpsClient::checkin(
             AppLog::logf("[VPS] Erro ao decodificar JSON da VPS: %s", err.c_str());
         }
     } else {
-        AppLog::logf("[VPS] Falha no check-in (HTTP %d)", httpCode);
+        AppLog::logf("[VPS] Falha final no check-in após 3 tentativas (HTTP %d)", httpCode);
     }
-
-    http.end();
 
 #if WIREGUARD_ENABLED
     if (wgActive) {
+        delay(100);
         wg.end();
     }
 #endif
@@ -135,7 +155,7 @@ bool VpsClient::downloadAndApplyOta(const String& firmwareUrl) {
     WireGuard wg;
     bool wgActive = false;
     AppLog::log("[VPS OTA] Iniciando túnel WireGuard para download do firmware...");
-    wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
+    wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_SUBNET, WIREGUARD_GATEWAY, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
     if (wgActive) {
         url.replace("163.176.44.220:8000", "10.8.0.1:8000");
     }
