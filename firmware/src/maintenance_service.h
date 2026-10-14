@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <WebServer.h>
 #include <ArduinoOTA.h>
+#include <WireGuard-ESP32.h>
 
 class MaintenanceService {
 public:
@@ -12,6 +13,7 @@ public:
 
 private:
     static WebServer _server;
+    static WireGuard _wg;
     static bool _running;
     static unsigned long _lastActivityMs;
     static const unsigned long TIMEOUT_MS = 300000; // 5 minutos

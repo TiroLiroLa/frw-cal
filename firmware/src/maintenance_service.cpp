@@ -11,6 +11,7 @@
 
 
 WebServer MaintenanceService::_server(80);
+WireGuard MaintenanceService::_wg;
 bool MaintenanceService::_running = false;
 unsigned long MaintenanceService::_lastActivityMs = 0;
 static Preferences prefs;
@@ -45,8 +46,18 @@ void MaintenanceService::start() {
     }
 
     if (WiFi.status() == WL_CONNECTED) {
-        AppLog::logf("[Manutenção] Conectado! IP: %s", WiFi.localIP().toString().c_str());
-        AppLog::logf("[Manutenção] Painel Web: http://%s/", WiFi.localIP().toString().c_str());
+        AppLog::logf("[Manutenção] Conectado ao Wi-Fi! IP Local: %s", WiFi.localIP().toString().c_str());
+
+#if WIREGUARD_ENABLED
+        AppLog::log("[VPN] Conectando ao túnel WireGuard (Oracle VPN)...");
+        if (_wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT)) {
+            AppLog::logf("[VPN] Conectado com sucesso! IP Fixo na VPN: %s", WIREGUARD_LOCAL_IP.toString().c_str());
+            AppLog::logf("[VPN] Painel Web via VPN: http://%s/", WIREGUARD_LOCAL_IP.toString().c_str());
+            AppLog::logf("[VPN] Comando OTA Fixo: pio run -d firmware -t upload --upload-port %s", WIREGUARD_LOCAL_IP.toString().c_str());
+        } else {
+            AppLog::log("[VPN] Falha ao iniciar WireGuard.");
+        }
+#endif
     } else {
         AppLog::log("[Manutenção] Aviso: Wi-Fi offline. Verifique credenciais.");
     }
@@ -99,6 +110,9 @@ void MaintenanceService::stop() {
     AppLog::log("[Manutenção] Encerrando modo de manutenção e entrando em Deep Sleep...");
     _running = false;
     _server.stop();
+#if WIREGUARD_ENABLED
+    _wg.end();
+#endif
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     delay(200);

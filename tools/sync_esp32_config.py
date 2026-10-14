@@ -201,9 +201,19 @@ static const char* GOOGLE_CALENDARS[MAX_CALENDARS] = {{
 
 // 11. Conexão com VPS (Telemetria, Logs e Auto-Update)
 #define VPS_ENABLED          true
-#define VPS_HOST             "http://163.176.44.220:8000"
+#define VPS_HOST             "http://10.8.0.1:8000"
 #define VPS_API_KEY          "frw-cal-secret-token"
 #define FIRMWARE_VERSION     "1.2.0"
+
+// 12. Rede Privada Oracle VPN (WireGuard)
+#define WIREGUARD_ENABLED            true
+#define WIREGUARD_LOCAL_IP          IPAddress(10, 8, 0, 7)
+#define WIREGUARD_SUBNET            IPAddress(255, 255, 255, 0)
+#define WIREGUARD_GATEWAY           IPAddress(10, 8, 0, 1)
+#define WIREGUARD_PRIVATE_KEY       "cHAJFgXEq6ywQKmcD474CM4ioNfPUOdWRQNKAbSoz2w="
+#define WIREGUARD_ENDPOINT_ADDRESS  "163.176.44.220"
+#define WIREGUARD_ENDPOINT_PORT     51820
+#define WIREGUARD_SERVER_PUBKEY     "w6O95bqe3MOLSuUis51zH4zj/4q17FAydaLWuCYGuW0="
 """
 
     with open(TARGET_CONFIG_H, "w", encoding="utf-8") as f:

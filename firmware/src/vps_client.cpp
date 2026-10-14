@@ -1,10 +1,15 @@
 #include "vps_client.h"
 #include "logger.h"
+#include "config.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <HTTPUpdate.h>
 #include <ArduinoJson.h>
+
+#if WIREGUARD_ENABLED
+#include <WireGuard-ESP32.h>
+#endif
 
 VpsCheckinResult VpsClient::checkin(
     const String& host,
@@ -30,6 +35,16 @@ VpsCheckinResult VpsClient::checkin(
         endpoint += "/";
     }
     endpoint += "api/checkin";
+
+#if WIREGUARD_ENABLED
+    WireGuard wg;
+    bool wgActive = false;
+    if (endpoint.indexOf("10.8.0.1") >= 0) {
+        AppLog::log("[VPS] Iniciando túnel WireGuard para check-in...");
+        wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
+        delay(150);
+    }
+#endif
 
     AppLog::logf("[VPS] Enviando check-in para %s...", endpoint.c_str());
 
@@ -98,6 +113,13 @@ VpsCheckinResult VpsClient::checkin(
     }
 
     http.end();
+
+#if WIREGUARD_ENABLED
+    if (wgActive) {
+        wg.end();
+    }
+#endif
+
     return result;
 }
 
@@ -105,6 +127,16 @@ bool VpsClient::downloadAndApplyOta(const String& firmwareUrl) {
     if (firmwareUrl.length() == 0) return false;
 
     AppLog::logf("[VPS OTA] Iniciando download e gravação de %s...", firmwareUrl.c_str());
+
+#if WIREGUARD_ENABLED
+    WireGuard wg;
+    bool wgActive = false;
+    if (firmwareUrl.indexOf("10.8.0.1") >= 0) {
+        AppLog::log("[VPS OTA] Iniciando túnel WireGuard para download do firmware...");
+        wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
+        delay(150);
+    }
+#endif
 
     httpUpdate.setLedPin(-1);
     httpUpdate.rebootOnUpdate(false); // We control reboot explicitly
@@ -118,6 +150,12 @@ bool VpsClient::downloadAndApplyOta(const String& firmwareUrl) {
         WiFiClient client;
         ret = httpUpdate.update(client, firmwareUrl);
     }
+
+#if WIREGUARD_ENABLED
+    if (wgActive) {
+        wg.end();
+    }
+#endif
 
     switch (ret) {
         case HTTP_UPDATE_FAILED:

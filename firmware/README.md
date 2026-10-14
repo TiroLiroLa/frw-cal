@@ -144,20 +144,35 @@ O botão multifunção no GPIO 33 permite três ações dependendo do tempo em q
 | **Segurar 2.5s a 5.0s** | **Forçar Sincronização:** Acorda o ESP32, conecta ao Wi-Fi, baixa eventos da Google API, atualiza a tela e volta a dormir. | LED azul pisca 1x |
 | **Segurar > 5.0 segundos** | **Modo Manutenção (Web UI & OTA):** Mantém o ESP32 acordado na rede Wi-Fi por 5 minutos, inicia servidor Web local e ativa o receptor `ArduinoOTA`. | LED azul pisca 3x |
 
-### 2. Painel Web Local de Manutenção
+### 2. Atualização Sem Fio e Painel de Manutenção (Zero Fricção com IPs Dinâmicos)
 
-Ao ativar o Modo Manutenção (segurando o botão por 5 segundos), abra no navegador do seu computador ou celular conectado na mesma Wi-Fi:
+Para nunca depender de saber qual IP o roteador de casa atribuiu ao ESP32, você conta com **3 alternativas robustas**:
 
-👉 **`http://<IP_DO_ESP32>/`** (ex: `http://192.168.1.35/`)
-
-* **Status em Tempo Real:** Relógio RTC sincronizado, tensão de bateria, sinal Wi-Fi (dBm), heap livre e tempo restante do modo manutenção.
-* **Logs ao Vivo:** Visualizador do log circular da execução atual.
-* **Atualização de Firmware via Web:** Basta arrastar ou selecionar um novo arquivo `.bin` compilado e clicar em **Enviar Firmware**. O ESP32 grava e reinicia sozinho.
-* **ArduinoOTA (PlatformIO over Wi-Fi):**
-  Você também pode compilar e enviar o firmware diretamente do terminal sem cabos:
+#### Método A: Via Oracle VPN WireGuard (IP Fixo `10.8.0.7`) — *Recomendado*
+O ESP32 está cadastrado como peer na sua VPN Oracle (`10.8.0.7`). Ao entrar em Modo Manutenção, ele se conecta diretamente ao túnel:
+* **Upload direto pelo terminal:**
   ```bash
-  pio run -d firmware -t upload --upload-port 192.168.1.35
+  ./scripts/upload_vpn.sh
+  # Ou equivalente:
+  pio run -d firmware -t upload --upload-port 10.8.0.7
   ```
+* **Painel Web na VPN:** Acesse no navegador: **`http://10.8.0.7/`**
+* O IP `10.8.0.7` é **estático e imutável**, não importando qual rede Wi-Fi o ESP32 estiver utilizando.
+
+#### Método B: Via mDNS na Rede Local (`frw-cal.local`)
+Sem precisar da VPN e sem saber o IP:
+* **Upload via terminal:**
+  ```bash
+  ./scripts/upload_mdns.sh
+  # Ou equivalente:
+  pio run -d firmware -t upload --upload-port frw-cal.local
+  ```
+* **Painel Web:** Acesse: **`http://frw-cal.local/`**
+
+#### Método C: Auto-Update Silencioso pela VPS (Zero-Touch)
+Nem requer Modo Manutenção:
+1. Digite `calendario` no terminal e pressione `[f]` para ativar o novo `.bin`.
+2. O ESP32 baixa a atualização sozinho no próximo ciclo agendado e grava na memória flash de forma autônoma.
 
 ---
 
