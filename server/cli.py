@@ -205,6 +205,21 @@ def format_relative_time(dt_str):
         return dt_str
 
 
+TZ_BR = timezone(timedelta(hours=-3))
+
+
+def format_local_timestamp(utc_dt_str):
+    if not utc_dt_str:
+        return "-"
+    try:
+        clean_str = utc_dt_str.replace("T", " ").split(".")[0]
+        dt_utc = datetime.strptime(clean_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        dt_local = dt_utc.astimezone(TZ_BR)
+        return dt_local.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return utc_dt_str
+
+
 def get_rssi_bar(rssi):
     if rssi is None:
         return f"{DIM}N/D{RESET}"
@@ -227,10 +242,10 @@ def get_rssi_bar(rssi):
 
 
 def get_next_midnight_str():
-    now = datetime.now()
-    tomorrow = now + timedelta(days=1)
-    next_wake = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 30)
-    diff = next_wake - now
+    now_br = datetime.now(TZ_BR)
+    tomorrow_br = now_br.date() + timedelta(days=1)
+    next_wake_br = datetime(tomorrow_br.year, tomorrow_br.month, tomorrow_br.day, 0, 0, 30, tzinfo=TZ_BR)
+    diff = next_wake_br - now_br
     hours, remainder = divmod(int(diff.total_seconds()), 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"00:00:30 (em {hours}h {minutes:02d}m {seconds:02d}s)"
@@ -316,7 +331,7 @@ def render_dashboard():
     output.append(f"\n  {B_MAGENTA}┌─ Auto-Update OTA (Firmware Disponível na VPS) ──────────────────────────────┐{RESET}")
     if active_fw:
         f1 = f"{BOLD}Versão Ativa:{RESET}  {B_GREEN}{active_fw.get('version')}{RESET} ({active_fw.get('filename')})"
-        f2 = f"{BOLD}Configurado:{RESET}   {active_fw.get('upload_time')} | {DIM}ESP32 atualizará no próximo ciclo{RESET}"
+        f2 = f"{BOLD}Configurado:{RESET}   {format_local_timestamp(active_fw.get('upload_time', ''))} | {DIM}ESP32 atualizará no próximo ciclo{RESET}"
         output.append(make_box_line(f1, box_w, B_MAGENTA))
         output.append(make_box_line(f2, box_w, B_MAGENTA))
     else:
@@ -330,7 +345,7 @@ def render_dashboard():
 
     if history:
         for r in history:
-            ts = r.get("timestamp", "").replace("T", " ").split(".")[0]
+            ts = format_local_timestamp(r.get("timestamp", ""))
             dt_disp = r.get("date") or "-"
             evts = str(r.get("events_count", 0))
             rssi = f"{r.get('rssi')} dBm" if r.get('rssi') else "-"
