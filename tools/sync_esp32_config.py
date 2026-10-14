@@ -198,6 +198,12 @@ static const char* GOOGLE_CALENDARS[MAX_CALENDARS] = {{
 #define LIGHT_PIN_LED         25   // Pino GPIO conectado ao transistor que aciona os LEDs
 #define LIGHT_PIN_BUTTON      33   // Pino GPIO do botão tátil (ligado ao GND, acorda via EXT0)
 #define LIGHT_TIMEOUT_SECONDS 15   // Duração que a tela fica iluminada (em segundos)
+
+// 11. Conexão com VPS (Telemetria, Logs e Auto-Update)
+#define VPS_ENABLED          true
+#define VPS_HOST             "http://163.176.44.220:8000"
+#define VPS_API_KEY          "frw-cal-secret-token"
+#define FIRMWARE_VERSION     "1.2.0"
 """
 
     with open(TARGET_CONFIG_H, "w", encoding="utf-8") as f:

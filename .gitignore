@@ -45,6 +45,10 @@ output/*
 !output/.gitkeep
 !output/preview.png
 
+# Server storage
+server/firmware_storage/*.bin
+server/data/*.db
+
 # IDE & OS
 .vscode/
 .idea/

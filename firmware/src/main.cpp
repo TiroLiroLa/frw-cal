@@ -11,6 +11,11 @@
 #include "calendar_service.h"
 #include "weather_service.h"
 #include "ui_renderer.h"
+#include "logger.h"
+#include "maintenance_service.h"
+#include "vps_client.h"
+#include <Preferences.h>
+
 
 static Canvas canvas;
 static EPD_SSD1683 display(EPD_PIN_CS, EPD_PIN_DC, EPD_PIN_RST, EPD_PIN_BUSY, EPD_PIN_SCK, EPD_PIN_MOSI);
@@ -41,19 +46,27 @@ bool connectWiFi() {
     }
 }
 
+#include <esp_sntp.h>
+
 bool syncTime() {
     Serial.println("[NTP] Sincronizando horário...");
-    configTzTime(TIMEZONE_POSIX, NTP_SERVER);
+    if (sntp_enabled()) {
+        sntp_stop();
+    }
+    sntp_setoperatingmode(SNTP_OPMODE_POLL);
+    sntp_setservername(0, const_cast<char*>(NTP_SERVER));
+    sntp_init();
 
-    time_t now = time(nullptr);
+    setenv("TZ", TIMEZONE_POSIX, 1);
+    tzset();
+
     unsigned long start = millis();
-    // 1700000000 is Nov 2023. Valid current time will be greater
-    while (now < 1700000000 && (millis() - start) < 10000) {
-        delay(200);
-        now = time(nullptr);
+    while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && (millis() - start) < 10000) {
+        delay(100);
     }
 
-    if (now >= 1700000000) {
+    time_t now = time(nullptr);
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED || now >= 1700000000) {
         struct tm tm_val;
         localtime_r(&now, &tm_val);
         Serial.printf("[NTP] Horário sincronizado: %04d-%02d-%02d %02d:%02d:%02d\n",
@@ -68,11 +81,11 @@ bool syncTime() {
 
 uint64_t calculateSleepSeconds(const struct tm& current_tm) {
 #if REFRESH_MODE == REFRESH_MODE_DAILY
-    // Daily mode: Sleep until DAILY_REFRESH_HOUR:DAILY_REFRESH_MINUTE (e.g. 00:00:15)
+    // Daily mode: Sleep until DAILY_REFRESH_HOUR:DAILY_REFRESH_MINUTE:30 (e.g. 00:00:30)
     struct tm target_tm = current_tm;
     target_tm.tm_hour = DAILY_REFRESH_HOUR;
     target_tm.tm_min = DAILY_REFRESH_MINUTE;
-    target_tm.tm_sec = 15; // 15 seconds buffer past midnight to ensure clock is firmly into the next day
+    target_tm.tm_sec = 30; // 30 seconds buffer past midnight to ensure clock is firmly into the next day
 
     time_t cur_sec = mktime(const_cast<struct tm*>(&current_tm));
     time_t target_sec = mktime(&target_tm);
@@ -82,8 +95,8 @@ uint64_t calculateSleepSeconds(const struct tm& current_tm) {
         target_sec += 86400;
     }
     uint64_t diff = target_sec - cur_sec;
-    // Safety minimum sleep (5s) to prevent zero or negative sleep timers
-    if (diff < 5) diff = 5;
+    // Safety minimum sleep (10s) to prevent zero or negative sleep timers
+    if (diff < 10) diff = 10;
     return diff;
 #else
     // Interval mode
@@ -93,22 +106,40 @@ uint64_t calculateSleepSeconds(const struct tm& current_tm) {
 
 #if LIGHT_ENABLED
 void handleLightWakeup() {
-    Serial.println("\n[Light] >>> Acordado pelo botão de leitura sob demanda! <<<");
+    Serial.println("\n[Button] Acordado por interação no botão...");
 
-    // Verifica se é um toque longo (> 2.5s) para forçar atualização do calendário
+    // Verifica a duração do pressionamento:
+    // < 2.5s: iluminação de leitura sob demanda
+    // 2.5s a 5.0s: forçar sincronização da agenda
+    // >= 5.0s: MODO MANUTENÇÃO (Web UI + OTA sem fio)
     unsigned long pressStart = millis();
-    bool forceSync = false;
+    int pressType = 0; // 0 = curto, 1 = medio (sync), 2 = longo (manutencao)
     while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
         delay(50);
-        if (millis() - pressStart >= 2500) {
-            forceSync = true;
+        unsigned long elapsed = millis() - pressStart;
+        if (elapsed >= 5000) {
+            pressType = 2; // >= 5s: Modo Manutenção
             break;
+        } else if (elapsed >= 2500) {
+            pressType = 1; // 2.5s a 5s: Forçar Sync
         }
     }
 
-    if (forceSync) {
-        Serial.println("[Light] Pressionamento longo detectado! Forçando sincronização da agenda...");
-        // Aguarda soltar o botão antes de iniciar o processo de sincronização
+    if (pressType == 2) {
+        Serial.println("\n[Button] >>> Pressionamento de 5s detectado! Entrando em MODO MANUTENÇÃO... <<<");
+        while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+            delay(50);
+        }
+        MaintenanceService::start();
+        while (MaintenanceService::isRunning()) {
+            MaintenanceService::handle();
+            delay(10);
+        }
+        return;
+    }
+
+    if (pressType == 1) {
+        Serial.println("[Button] Pressionamento longo (2.5s) detectado! Forçando sincronização da agenda...");
         while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
             delay(50);
         }
@@ -119,6 +150,7 @@ void handleLightWakeup() {
     pinMode(LIGHT_PIN_LED, OUTPUT);
     digitalWrite(LIGHT_PIN_LED, HIGH);
     Serial.printf("[Light] LEDs acesos por até %d segundos...\n", LIGHT_TIMEOUT_SECONDS);
+
 
     // Debounce inicial
     delay(200);
@@ -145,6 +177,10 @@ void handleLightWakeup() {
     while (digitalRead(LIGHT_PIN_BUTTON) == LOW && (millis() - releaseStart) < 2000) {
         delay(50);
     }
+
+    // Configura fuso horário local
+    setenv("TZ", TIMEZONE_POSIX, 1);
+    tzset();
 
     // Calcula tempo restante até a próxima sincronização de calendário
     time_t now = time(nullptr);
@@ -174,6 +210,11 @@ void handleLightWakeup() {
 void setup() {
     Serial.begin(115200);
     delay(500);
+
+    AppLog::init();
+    setenv("TZ", TIMEZONE_POSIX, 1);
+    tzset();
+
 
     Serial.println("\n==============================================");
     Serial.println("  Smart Calendar (frw-cal) - NodeMCU-32S ESP32");
@@ -225,6 +266,28 @@ void setup() {
     int curHour = timeinfo.tm_hour;
     int curMin = timeinfo.tm_min;
 
+    // Proteção contra desvio do oscilador RTC: se acordou alguns minutos antes da meia-noite (ex: 23:55-23:59),
+    // NÃO renderiza o dia anterior novamente! Dorme apenas os segundos restantes até passar da meia-noite.
+#if REFRESH_MODE == REFRESH_MODE_DAILY
+    if (curHour == 23 && curMin >= 55) {
+        uint64_t sleepSec = calculateSleepSeconds(timeinfo);
+        Serial.printf("[Power] Acordou antes da meia-noite (%02d:%02d). Voltando a dormir por %llu segundos...\n",
+                      curHour, curMin, sleepSec);
+        Serial.println("==============================================\n");
+        Serial.flush();
+#if LIGHT_ENABLED
+        esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
+        pinMode(LIGHT_PIN_BUTTON, INPUT_PULLUP);
+        rtc_gpio_pullup_en((gpio_num_t)LIGHT_PIN_BUTTON);
+        rtc_gpio_pulldown_dis((gpio_num_t)LIGHT_PIN_BUTTON);
+        rtc_gpio_hold_en((gpio_num_t)LIGHT_PIN_BUTTON);
+        esp_sleep_enable_ext0_wakeup((gpio_num_t)LIGHT_PIN_BUTTON, 0);
+#endif
+        esp_sleep_enable_timer_wakeup(sleepSec * 1000000ULL);
+        esp_deep_sleep_start();
+    }
+#endif
+
     // 3. Busca de compromissos
     CalendarService calendarService;
     std::vector<CalendarEvent> events;
@@ -257,13 +320,36 @@ void setup() {
     display.display(canvas.getBlackBuffer(), canvas.getRedBuffer());
     display.sleep();
 
-    // 7. Desligamento do rádio Wi-Fi
+    // 7. Check-in na VPS (Telemetria, Logs e Auto-Update)
+#if VPS_ENABLED
+    if (wifiOk) {
+        Preferences vpsPrefs;
+        vpsPrefs.begin("frw_cal", true);
+        String vpsHost = vpsPrefs.getString("vps_host", VPS_HOST);
+        String vpsKey = vpsPrefs.getString("vps_key", VPS_API_KEY);
+        vpsPrefs.end();
+
+        VpsCheckinResult vpsRes = VpsClient::checkin(
+            vpsHost, vpsKey, FIRMWARE_VERSION,
+            curYear, curMonth, curDay,
+            (int)events.size(), true,
+            "Ciclo diário executado com sucesso"
+        );
+
+        if (vpsRes.hasFirmwareUpdate && vpsRes.firmwareUrl.length() > 0) {
+            AppLog::logf("[VPS] Atualização de firmware pendente: %s", vpsRes.firmwareUrl.c_str());
+            VpsClient::downloadAndApplyOta(vpsRes.firmwareUrl);
+        }
+    }
+#endif
+
+    // 8. Desligamento do rádio Wi-Fi
     if (wifiOk) {
         WiFi.disconnect(true);
         WiFi.mode(WIFI_OFF);
     }
 
-    // 8. Modo Deep Sleep ultra-econômico
+    // 9. Modo Deep Sleep ultra-econômico
     time_t sleepNow = time(nullptr);
     struct tm sleepTimeinfo = {0};
     if (sleepNow >= 1700000000) {
@@ -296,5 +382,9 @@ void setup() {
 }
 
 void loop() {
-    // Nunca é executado pois o ESP32 entra em deep sleep ao final de setup()
+    if (MaintenanceService::isRunning()) {
+        MaintenanceService::handle();
+        delay(10);
+    }
 }
+

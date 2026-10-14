@@ -211,13 +211,13 @@ void UIRenderer::renderEventList(int year, int month, int day, const std::vector
         return a.startTime < b.startTime;
     });
 
-    if (upcoming.size() > (size_t)maxEvents) {
+    if (maxEvents > 0 && upcoming.size() > (size_t)maxEvents) {
         upcoming.resize(maxEvents);
     }
 
     // 3. Render event items
     int start_y = divider_y + 4;
-    int avail_height = (y1 - 2) - start_y;
+    int max_y = y1 - 2;
 
     if (upcoming.empty()) {
         int empty_y = start_y + 40;
@@ -226,14 +226,20 @@ void UIRenderer::renderEventList(int year, int month, int day, const std::vector
         return;
     }
 
-    int n_events = upcoming.size();
-    // Dynamic spacing: fits 1 to 5 events evenly
-    int item_h = std::min(avail_height / n_events, 85);
+    struct RenderedItem {
+        String badge_text;
+        int bw;
+        int bh;
+        std::vector<String> title_lines;
+        String loc_str;
+        int item_h;
+    };
 
-    for (int idx = 0; idx < n_events; idx++) {
-        const auto& ev = upcoming[idx];
-        int item_y = start_y + idx * item_h;
+    std::vector<RenderedItem> items_to_render;
+    const int sep_gap = 4;
+    int curr_calc_y = start_y;
 
+    for (const auto& ev : upcoming) {
         bool is_today = ev.isToday(year, month, day);
         bool is_tomorrow = ev.isTomorrow(year, month, day);
 
@@ -277,41 +283,62 @@ void UIRenderer::renderEventList(int year, int month, int day, const std::vector
         }
 
         int max_badge_w = width - 12;
-        badge_text = canvas.truncateToWidth(badge_text.c_str(), Font_LiberationSans_Bold_12, max_badge_w);
+        badge_text = canvas.truncateToWidth(badge_text.c_str(), Font_LiberationSans_Bold_14, max_badge_w);
 
-        int text_w = getTextWidth(badge_text.c_str(), Font_LiberationSans_Bold_12);
+        int text_w = getTextWidth(badge_text.c_str(), Font_LiberationSans_Bold_14);
         int bw = text_w + 10;
-        int bh = 16;
-        int current_y = item_y;
+        int bh = 17;
 
-        // Solid RED pill for all events as requested
-        canvas.fillRoundRect(x0, current_y, x0 + bw, current_y + bh, 3, COLOR_RED);
-        canvas.drawText(x0 + 5, current_y + 1, badge_text.c_str(), Font_LiberationSans_Bold_12, COLOR_WHITE);
-
-        current_y += bh + 2;
-
-        // Title: wrapped into up to 2 lines
-        int max_title_lines = (item_h >= 50) ? 2 : 1;
         std::vector<String> title_lines;
-        const FontDef& titleFont = (item_h > 55) ? Font_LiberationSans_Bold_16 : Font_LiberationSans_Bold_14;
-        int line_spacing = (item_h > 55) ? 17 : 14;
+        canvas.wrapText(ev.summary.c_str(), Font_LiberationSans_Bold_14, width - 4, 2, title_lines);
+        int title_h = title_lines.size() * 15;
 
-        canvas.wrapText(ev.summary.c_str(), titleFont, width - 4, max_title_lines, title_lines);
-        for (const auto& line : title_lines) {
-            canvas.drawText(x0, current_y, line.c_str(), titleFont, COLOR_BLACK);
-            current_y += line_spacing;
+        String loc_str = "";
+        if (ev.location.length() > 0) {
+            loc_str = canvas.truncateToWidth(ev.location.c_str(), Font_LiberationSans_Bold_12, width - 4);
+        }
+        int loc_h = (loc_str.length() > 0) ? 13 : 0;
+
+        int bottom_pad = 2;
+        int item_h = bh + 2 + title_h + (loc_h > 0 ? (loc_h + 2) : 0) + bottom_pad;
+
+        if (curr_calc_y + item_h > max_y) {
+            break;
         }
 
-        // Location if present and fits
-        if (ev.location.length() > 0 && (current_y + 12 < item_y + item_h - 2)) {
-            String loc = canvas.truncateToWidth(ev.location.c_str(), Font_LiberationSans_Bold_12, width - 4);
-            canvas.drawText(x0, current_y, loc.c_str(), Font_LiberationSans_Bold_12, COLOR_BLACK);
+        items_to_render.push_back({badge_text, bw, bh, title_lines, loc_str, item_h});
+        curr_calc_y += item_h + sep_gap;
+    }
+
+    // Pass 2: Render items
+    int draw_y = start_y;
+    int n_render = items_to_render.size();
+
+    for (int idx = 0; idx < n_render; idx++) {
+        const auto& item = items_to_render[idx];
+
+        // 1. Badge (Solid RED pill)
+        canvas.fillRoundRect(x0, draw_y, x0 + item.bw, draw_y + item.bh, 3, COLOR_RED);
+        canvas.drawText(x0 + 5, draw_y + 1, item.badge_text.c_str(), Font_LiberationSans_Bold_14, COLOR_WHITE);
+
+        // 2. Title lines
+        int text_y = draw_y + item.bh + 2;
+        for (const auto& line : item.title_lines) {
+            canvas.drawText(x0, text_y, line.c_str(), Font_LiberationSans_Bold_14, COLOR_BLACK);
+            text_y += 15;
         }
 
-        // Separator line between items
-        if (idx < n_events - 1) {
-            int sep_y = item_y + item_h - 2;
+        // 3. Location if present
+        if (item.loc_str.length() > 0) {
+            text_y += 2;
+            canvas.drawText(x0, text_y, item.loc_str.c_str(), Font_LiberationSans_Bold_12, COLOR_BLACK);
+        }
+
+        // 4. Separator line between items (except after the last item)
+        if (idx < n_render - 1) {
+            int sep_y = draw_y + item.item_h;
             canvas.drawLine(x0, sep_y, x1, sep_y, COLOR_BLACK, 1);
+            draw_y = sep_y + sep_gap;
         }
     }
 }
@@ -336,6 +363,6 @@ void UIRenderer::render(int year, int month, int day, int hour, int minute,
 
     // 2. Right column
     Serial.println("[UI] Desenhando lista de eventos...");
-    renderEventList(year, month, day, events, 5);
+    renderEventList(year, month, day, events);
     Serial.println("[UI] Renderização finalizada!");
 }

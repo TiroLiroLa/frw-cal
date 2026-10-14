@@ -1,0 +1,15 @@
+[Unit]
+Description=frw-cal Hub - Smart Calendar VPS Gateway & OTA
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/frw-cal-hub
+ExecStart=/usr/bin/python3 /home/ubuntu/frw-cal-hub/app.py
+Restart=always
+RestartSec=5
+Environment=PORT=8000
+
+[Install]
+WantedBy=multi-user.target

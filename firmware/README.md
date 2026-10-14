@@ -124,6 +124,57 @@ O PlatformIO gerencia automaticamente a instalação do compilador e de todas as
 
 ## ⚡ Economia de Energia (Deep Sleep)
 
-- **Modo Diário (`REFRESH_MODE_DAILY` - Padrão):** O ESP32 calcula com precisão os segundos restantes até a meia-noite (`00:00:05`), atualiza o calendário e entra em modo deep sleep durante todo o dia. O consumo de corrente cai para ~15-20 µA, permitindo que o dispositivo funcione por semanas ou meses com uma bateria LiPo 18650.
+- **Modo Diário (`REFRESH_MODE_DAILY` - Padrão):** O ESP32 calcula com precisão os segundos restantes até a meia-noite (`00:00:30`), atualiza o calendário e entra em modo deep sleep durante todo o dia. O consumo de corrente cai para ~15-20 µA, permitindo que o dispositivo funcione por semanas ou meses com uma bateria LiPo 18650.
 - **Modo Intervalo (`REFRESH_MODE_INTERVAL`):** Atualiza a cada X minutos (configurável em `INTERVAL_MINUTES`).
 - **Resiliência Offline:** Se a rede Wi-Fi ou a API do Google cair temporariamente, o ESP32 carrega o cache gravado na memória Flash (NVS/Preferences) e mantém a tela atualizada sem travar.
+
+---
+
+## 📶 Gerenciamento Sem Fio & Modo Manutenção (Zero Cabos)
+
+O firmware conta com suporte nativo a **atualizações e diagnósticos 100% sem fio**, eliminando a necessidade de conectar cabos USB após a primeira gravação:
+
+### 1. Modos de Ação do Botão Físico (GPIO 33)
+
+O botão multifunção no GPIO 33 permite três ações dependendo do tempo em que é mantido pressionado:
+
+| Tempo Pressionado | Ação Disparada | Indicação Visual |
+| :--- | :--- | :--- |
+| **Toque Rápido (< 2.5s)** | **Luz de Leitura (Frontlight):** Acende os LEDs no GPIO 25 por 15s sem ligar Wi-Fi ou redesenhar a tela. Pressionar novamente apaga na hora. | LEDs acesos |
+| **Segurar 2.5s a 5.0s** | **Forçar Sincronização:** Acorda o ESP32, conecta ao Wi-Fi, baixa eventos da Google API, atualiza a tela e volta a dormir. | LED azul pisca 1x |
+| **Segurar > 5.0 segundos** | **Modo Manutenção (Web UI & OTA):** Mantém o ESP32 acordado na rede Wi-Fi por 5 minutos, inicia servidor Web local e ativa o receptor `ArduinoOTA`. | LED azul pisca 3x |
+
+### 2. Painel Web Local de Manutenção
+
+Ao ativar o Modo Manutenção (segurando o botão por 5 segundos), abra no navegador do seu computador ou celular conectado na mesma Wi-Fi:
+
+👉 **`http://<IP_DO_ESP32>/`** (ex: `http://192.168.1.35/`)
+
+* **Status em Tempo Real:** Relógio RTC sincronizado, tensão de bateria, sinal Wi-Fi (dBm), heap livre e tempo restante do modo manutenção.
+* **Logs ao Vivo:** Visualizador do log circular da execução atual.
+* **Atualização de Firmware via Web:** Basta arrastar ou selecionar um novo arquivo `.bin` compilado e clicar em **Enviar Firmware**. O ESP32 grava e reinicia sozinho.
+* **ArduinoOTA (PlatformIO over Wi-Fi):**
+  Você também pode compilar e enviar o firmware diretamente do terminal sem cabos:
+  ```bash
+  pio run -d firmware -t upload --upload-port 192.168.1.35
+  ```
+
+---
+
+## ☁️ Hub Central na VPS & Terminal ASCII (`calendario`)
+
+O ESP32 envia telemetria a cada ciclo de despertar para o serviço central na VPS Oracle Cloud:
+
+* **No Terminal (Local ou na VPS):**
+  Basta digitar:
+  ```bash
+  calendario
+  ```
+  Abre uma interface gráfica em ASCII/TUI no próprio terminal com telemetria do dispositivo, histórico de ciclos, contagem regressiva para o próximo despertar e gerenciamento de arquivos OTA.
+* **Teclas de Atalho no Terminal:**
+  * `[r]` Recarregar dados
+  * `[l]` Ver logs completos do último ciclo do ESP32
+  * `[f]` Gerenciar Firmware OTA (ativação de binários para auto-update)
+  * `[s]` Status do serviço de fundo systemd
+  * `[q]` Sair
+

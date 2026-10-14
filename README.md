@@ -32,6 +32,10 @@ Sistema de **calendário inteligente com tela e-Paper (tinta eletrônica)** de 4
   - Coloca o display em modo de suspensão ultra-profunda (*deep sleep*) após cada atualização, prolongando a vida útil dos microcápsulas e reduzindo o consumo de energia a quase zero.
   - Horários ativos configuráveis (evita atualizações desnecessárias durante a madrugada).
   - Atualização automática precisa à meia-noite para avançar o dia no grid.
+- **Gerenciamento 100% Sem Fio (ESP32):**
+  - **Modo Manutenção (5s no botão):** Mantém o ESP32 acordado por 5 min, sobe servidor web local (`http://192.168.1.35/`) para upload de `.bin` e ativa `ArduinoOTA` para gravação via Wi-Fi pelo PlatformIO.
+  - **Terminal Hub VPS (`calendario`):** Aplicação interativa em ASCII/TUI rodando no terminal (local ou via SSH) para monitorar bateria, sinal Wi-Fi, logs em tempo real e ativar atualizações remotas automáticas.
+  - **Particionamento Dual-OTA Seguro:** Atualizações gravadas na partição inativa com validação de hash, à prova de quedas de energia.
 - **Cache Offline Resiliente:**
   - Se a conexão Wi-Fi oscilar ou cair temporariamente, o calendário mantém a última exibição válida e continua funcionando normalmente.
 - **Modo Simulador no PC:**
@@ -214,8 +218,20 @@ frw-cal/
 │   ├── config.py              # Leitor tipado de configurações
 │   ├── main.py                # Ponto de entrada e ciclo de atualização
 │   └── weather.py             # Previsão do tempo gratuita (Open-Meteo)
+├── firmware/                  # Firmware C++ autônomo para NodeMCU-32S (ESP32)
+│   ├── src/                   # Código fonte (Display, Google OAuth, NTP, VPS Client, OTA)
+│   ├── min_spiffs.csv         # Tabela de partições Dual-OTA (1.9MB ota_0 e ota_1)
+│   ├── platformio.ini         # Configuração de build PlatformIO
+│   └── README.md              # Documentação específica do firmware ESP32
+├── server/                    # Hub Central na VPS (Oracle Cloud)
+│   ├── app.py                 # Servidor HTTP/API com banco SQLite e auto-update OTA
+│   ├── cli.py                 # Aplicação TUI/ASCII para o comando 'calendario'
+│   ├── deploy_to_vps.sh       # Script de implantação automatizada na VPS
+│   └── frw-cal-hub.service    # Daemon systemd do hub
+├── scripts/
+│   └── calendario.sh          # Launcher local para o painel de terminal da VPS
 ├── systemd/
-│   └── frw-cal.service        # Serviço systemd para inicialização no boot
+│   └── frw-cal.service        # Serviço systemd para Raspberry Pi
 ├── install.sh                 # Script instalador para o Raspberry Pi OS
 ├── requirements.txt           # Dependências Python
 ├── run_preview.py             # Script de teste rápido no computador

@@ -24,7 +24,7 @@ def render_event_list(
     width = x1 - x0
 
     font_title = get_font("bold", 15)
-    font_badge = get_font("bold", 12)
+    font_badge = get_font("bold", 13)
     font_item_title = get_font("bold", 15)
     font_item_sub = get_font("bold", 12)
 
@@ -45,13 +45,12 @@ def render_event_list(
         ev for ev in events if ev.end.date() >= current_date and not ev.is_holiday
     ]
     upcoming.sort(key=lambda ev: ev.start)
-    display_events = upcoming[:max_events]
 
     # 3. Render event items
     start_y = divider_y + 4
-    avail_height = (y1 - 2) - start_y
+    max_y = y1 - 2
 
-    if not display_events:
+    if not upcoming:
         # Empty state message
         empty_y = start_y + 40
         font_empty = get_font("bold", 13)
@@ -70,13 +69,12 @@ def render_event_list(
         )
         return
 
-    n_events = len(display_events)
-    # Dynamic spacing: fits 1 to 5 events evenly
-    item_h = min(avail_height // n_events, 85)
+    # Pass 1: Measure each event's natural required height and find all that fit on screen
+    sep_gap = 4
+    curr_calc_y = start_y
+    items_to_render = []
 
-    for idx, ev in enumerate(display_events):
-        item_y = start_y + idx * item_h
-
+    for ev in upcoming:
         is_today = ev.is_today(current_date)
         is_tomorrow = ev.is_tomorrow(current_date)
 
@@ -145,38 +143,61 @@ def render_event_list(
             bbox_b = font_badge.getbbox(badge_text)
 
         bw = (bbox_b[2] - bbox_b[0]) + 10
-        bh = 16
-        current_y = item_y
-        badge_rect = (x0, current_y, x0 + bw, current_y + bh)
+        bh = 17
 
-        # Style: Solid RED pill for all events as requested
+        # Title: wrapped into up to 2 lines
+        title_lines = wrap_text_to_width(
+            ev.summary, font_item_title, max_width_px=width - 4, max_lines=2
+        )
+        line_spacing = 15
+        title_h = len(title_lines) * line_spacing
+
+        # Location if present
+        loc_str = truncate_to_width(ev.location, font_item_sub, max_width_px=width - 4) if ev.location else ""
+        loc_h = 13 if loc_str else 0
+
+        bottom_pad = 2
+        item_h = bh + 2 + title_h + (loc_h + 2 if loc_h else 0) + bottom_pad
+
+        if curr_calc_y + item_h > max_y:
+            break
+
+        items_to_render.append({
+            "badge_text": badge_text,
+            "bw": bw,
+            "bh": bh,
+            "title_lines": title_lines,
+            "line_spacing": line_spacing,
+            "loc_str": loc_str,
+            "item_h": item_h,
+        })
+        curr_calc_y += item_h + sep_gap
+
+    # Pass 2: Render all events that fit cleanly
+    draw_y = start_y
+    n_render = len(items_to_render)
+
+    for idx, item in enumerate(items_to_render):
+        # 1. Badge (Solid RED pill)
+        badge_rect = (x0, draw_y, x0 + item["bw"], draw_y + item["bh"])
         canvas.draw_rounded_rectangle(badge_rect, radius=3, fill="red")
         canvas.draw_text(
-            (x0 + 5, current_y + 1), badge_text, font=font_badge, color="white"
+            (x0 + 5, draw_y + 1), item["badge_text"], font=font_badge, color="white"
         )
 
-        current_y += bh + 2
+        # 2. Title lines
+        text_y = draw_y + item["bh"] + 2
+        for line in item["title_lines"]:
+            canvas.draw_text((x0, text_y), line, font=font_item_title, color="black")
+            text_y += item["line_spacing"]
 
-        # Title: wrapped into up to 2 lines if needed
-        max_title_lines = 2 if item_h >= 50 else 1
-        title_lines = wrap_text_to_width(
-            ev.summary, font_item_title, max_width_px=width - 4, max_lines=max_title_lines
-        )
-        line_spacing = 14 if item_h <= 55 else 16
-        for line in title_lines:
-            canvas.draw_text(
-                (x0, current_y), line, font=font_item_title, color="black"
-            )
-            current_y += line_spacing
+        # 3. Location if present
+        if item["loc_str"]:
+            text_y += 2
+            canvas.draw_text((x0, text_y), item["loc_str"], font=font_item_sub, color="black")
 
-        # Location if present and fits without colliding with separator
-        if ev.location and (current_y + 12 < item_y + item_h - 2):
-            loc = truncate_to_width(ev.location, font_item_sub, max_width_px=width - 4)
-            canvas.draw_text(
-                (x0, current_y), loc, font=font_item_sub, color="black"
-            )
-
-        # Separator line between items (except last item)
-        if idx < n_events - 1:
-            sep_y = item_y + item_h - 2
+        # 4. Separator line between items (except after the last item)
+        if idx < n_render - 1:
+            sep_y = draw_y + item["item_h"]
             canvas.draw_line((x0, sep_y, x1, sep_y), color="black", width=1)
+            draw_y = sep_y + sep_gap
