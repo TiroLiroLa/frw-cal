@@ -322,9 +322,11 @@ def render_dashboard():
         output.append(make_box_line(l6, box_w, B_BLUE))
     else:
         output.append(make_box_line(f"{DIM}Nenhum dado recebido ainda do ESP32.{RESET}", box_w, B_BLUE))
-        output.append(make_box_line(f"O ESP32 enviará telemetria automaticamente via túnel WireGuard (10.8.0.7):", box_w, B_BLUE))
-        output.append(make_box_line(f"• Para forçar agora: segure o botão do ESP32 por {BOLD}3 segundos{RESET} (sincronizar).", box_w, B_BLUE))
-        output.append(make_box_line(f"• Para modo manutenção: segure o botão por {BOLD}5 segundos{RESET} (OTA e Web UI).", box_w, B_BLUE))
+        output.append(make_box_line(f"Comandos no Botão do ESP32 (com feedback no LED):", box_w, B_BLUE))
+        output.append(make_box_line(f"• {BOLD}2 cliques rápidos{RESET}: Sincronizar agenda agora (LED pisca 2x)", box_w, B_BLUE))
+        output.append(make_box_line(f"• {BOLD}3 cliques rápidos{RESET}: Modo Manutenção OTA (LED pisca 3x + heartbeat)", box_w, B_BLUE))
+        output.append(make_box_line(f"• {BOLD}1 clique{RESET}: Luz de leitura por 15s (LED aceso fixo)", box_w, B_BLUE))
+        output.append(make_box_line(f"{DIM}(Também funciona segurando: o LED pisca aos 1.5s p/ sync e 3.5s p/ manutenção){RESET}", box_w, B_BLUE))
     output.append(f"  {B_BLUE}└─────────────────────────────────────────────────────────────────────────────┘{RESET}")
 
     # Caixa de Firmware OTA Ativo

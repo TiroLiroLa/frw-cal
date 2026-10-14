@@ -99,6 +99,35 @@ void MaintenanceService::handle() {
     ArduinoOTA.handle();
     _server.handleClient();
 
+#if LIGHT_ENABLED
+    // Feedback visual suave de batimento cardíaco (Heartbeat) a cada 3 segundos
+    static unsigned long lastHeartbeat = 0;
+    static bool heartbeatActive = false;
+    unsigned long now = millis();
+    if (now - lastHeartbeat >= 3000) {
+        lastHeartbeat = now;
+        digitalWrite(LIGHT_PIN_LED, HIGH);
+        heartbeatActive = true;
+    } else if (heartbeatActive && (now - lastHeartbeat >= 60)) {
+        digitalWrite(LIGHT_PIN_LED, LOW);
+        heartbeatActive = false;
+    }
+
+    // Clique no botão para sair antecipadamente do Modo Manutenção
+    if (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+        delay(40);
+        if (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+            AppLog::log("[Manutenção] Botão pressionado. Encerrando modo manutenção...");
+            digitalWrite(LIGHT_PIN_LED, HIGH);
+            delay(400);
+            digitalWrite(LIGHT_PIN_LED, LOW);
+            while (digitalRead(LIGHT_PIN_BUTTON) == LOW) delay(20);
+            stop();
+            return;
+        }
+    }
+#endif
+
     // Check 5-minute inactivity timeout
     if (millis() - _lastActivityMs >= TIMEOUT_MS) {
         AppLog::log("[Manutenção] Tempo limite de 5 minutos atingido por inatividade.");
@@ -117,8 +146,24 @@ void MaintenanceService::stop() {
     WiFi.mode(WIFI_OFF);
     delay(200);
 
-    // Sleep for 1 hour or until next scheduled event
-    esp_sleep_enable_timer_wakeup(3600ULL * 1000000ULL);
+    // Calcula tempo restante até a próxima sincronização (meia-noite)
+    time_t now = time(nullptr);
+    uint64_t sleepSec = 3600;
+    if (now >= 1700000000) {
+        struct tm timeinfo = {0};
+        localtime_r(&now, &timeinfo);
+        struct tm target_tm = timeinfo;
+        target_tm.tm_hour = DAILY_REFRESH_HOUR;
+        target_tm.tm_min = DAILY_REFRESH_MINUTE;
+        target_tm.tm_sec = 30;
+        time_t cur_sec = mktime(&timeinfo);
+        time_t target_sec = mktime(&target_tm);
+        if (target_sec <= cur_sec) target_sec += 86400;
+        sleepSec = (uint64_t)(target_sec - cur_sec);
+        if (sleepSec < 10) sleepSec = 10;
+    }
+    esp_sleep_enable_timer_wakeup(sleepSec * 1000000ULL);
+
 #if LIGHT_ENABLED
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
     pinMode(LIGHT_PIN_BUTTON, INPUT_PULLUP);

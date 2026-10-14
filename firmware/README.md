@@ -134,15 +134,16 @@ O PlatformIO gerencia automaticamente a instalação do compilador e de todas as
 
 O firmware conta com suporte nativo a **atualizações e diagnósticos 100% sem fio**, eliminando a necessidade de conectar cabos USB após a primeira gravação:
 
-### 1. Modos de Ação do Botão Físico (GPIO 33)
+### 1. Comandos do Botão Físico (GPIO 33) & Feedback no LED (GPIO 25)
 
-O botão multifunção no GPIO 33 permite três ações dependendo do tempo em que é mantido pressionado:
+O botão multifunção utiliza um sistema inteligente de **cliques rápidos** e **feedback visual em tempo real no LED**, sem necessidade de ficar contando segundos no escuro:
 
-| Tempo Pressionado | Ação Disparada | Indicação Visual |
+| Comando | Ação Disparada | Feedback Visual no LED |
 | :--- | :--- | :--- |
-| **Toque Rápido (< 2.5s)** | **Luz de Leitura (Frontlight):** Acende os LEDs no GPIO 25 por 15s sem ligar Wi-Fi ou redesenhar a tela. Pressionar novamente apaga na hora. | LEDs acesos |
-| **Segurar 2.5s a 5.0s** | **Forçar Sincronização:** Acorda o ESP32, conecta ao Wi-Fi, baixa eventos da Google API, atualiza a tela e volta a dormir. | LED azul pisca 1x |
-| **Segurar > 5.0 segundos** | **Modo Manutenção (Web UI & OTA):** Mantém o ESP32 acordado na rede Wi-Fi por 5 minutos, inicia servidor Web local e ativa o receptor `ArduinoOTA`. | LED azul pisca 3x |
+| **1 Clique (Toque simples)** | **Luz de Leitura (Frontlight):** Acende a iluminação suave por 15 segundos para ler a tela no escuro. Pressionar novamente desliga antecipadamente. | LED acende imediatamente e fica contínuo |
+| **2 Cliques Rápidos (Duplo clique)** | **Forçar Sincronização:** Acorda o ESP32, conecta na VPN WireGuard (`10.8.0.7`), busca eventos do Google Calendar, atualiza o display E-Paper e envia telemetria à VPS. | **LED pisca 2 vezes** claramente (`💡__💡`) |
+| **3 Cliques Rápidos (Triplo clique)** | **Modo Manutenção (Web UI & OTA):** Conecta à VPN no IP `10.8.0.7`, inicia o servidor web e receptor OTA por 5 minutos. Clique no botão para sair a qualquer momento. | **LED pisca 3 vezes rápidas** (`💡_💡_💡`) + **pulso (heartbeat)** a cada 3s durante o modo |
+| *(Opcional: Segurar)* | Se preferir segurar o botão continuamente, o LED avisa o momento exato de soltar: aos 1.5s pisca 2x (Sync) e aos 3.5s pisca rápido 4x (Manutenção). | Indicação visual durante o toque |
 
 ### 2. Atualização Sem Fio e Painel de Manutenção (Zero Fricção com IPs Dinâmicos)
 

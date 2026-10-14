@@ -105,31 +105,57 @@ uint64_t calculateSleepSeconds(const struct tm& current_tm) {
 }
 
 #if LIGHT_ENABLED
-void handleLightWakeup() {
+static void blinkLed(int count, int onMs, int offMs) {
+    pinMode(LIGHT_PIN_LED, OUTPUT);
+    for (int i = 0; i < count; i++) {
+        digitalWrite(LIGHT_PIN_LED, HIGH);
+        delay(onMs);
+        digitalWrite(LIGHT_PIN_LED, LOW);
+        if (i < count - 1) delay(offMs);
+    }
+}
+
+void handleButtonInteraction() {
     Serial.println("\n[Button] Acordado por interação no botão...");
 
-    // Verifica a duração do pressionamento:
-    // < 2.5s: iluminação de leitura sob demanda
-    // 2.5s a 5.0s: forçar sincronização da agenda
-    // >= 5.0s: MODO MANUTENÇÃO (Web UI + OTA sem fio)
+    // 1. Acende o LED imediatamente ao primeiro toque (feedback instantâneo)
+    digitalWrite(LIGHT_PIN_LED, HIGH);
+
     unsigned long pressStart = millis();
-    int pressType = 0; // 0 = curto, 1 = medio (sync), 2 = longo (manutencao)
+    bool signaledSync = false;
+    bool signaledMaint = false;
+    int holdAction = 0; // 0 = clique rápido, 1 = sync, 2 = manutenção
+
+    // Monitora duração caso o usuário segure o botão continuamente
     while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
-        delay(50);
-        unsigned long elapsed = millis() - pressStart;
-        if (elapsed >= 5000) {
-            pressType = 2; // >= 5s: Modo Manutenção
-            break;
-        } else if (elapsed >= 2500) {
-            pressType = 1; // 2.5s a 5s: Forçar Sync
+        unsigned long duration = millis() - pressStart;
+
+        // Se segurar por 3.5 segundos: Feedback visual de Modo Manutenção (4 piscadas rápidas)
+        if (duration >= 3500 && !signaledMaint) {
+            signaledMaint = true;
+            holdAction = 2;
+            for (int i = 0; i < 4; i++) {
+                digitalWrite(LIGHT_PIN_LED, LOW); delay(60);
+                digitalWrite(LIGHT_PIN_LED, HIGH); delay(60);
+            }
         }
+        // Se segurar por 1.5 segundos: Feedback visual de Sincronização (2 piscadas claras)
+        else if (duration >= 1500 && !signaledSync && !signaledMaint) {
+            signaledSync = true;
+            holdAction = 1;
+            digitalWrite(LIGHT_PIN_LED, LOW); delay(120);
+            digitalWrite(LIGHT_PIN_LED, HIGH); delay(180);
+            digitalWrite(LIGHT_PIN_LED, LOW); delay(120);
+            digitalWrite(LIGHT_PIN_LED, HIGH);
+        }
+        delay(15);
     }
 
-    if (pressType == 2) {
-        Serial.println("\n[Button] >>> Pressionamento de 5s detectado! Entrando em MODO MANUTENÇÃO... <<<");
-        while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
-            delay(50);
-        }
+    // Botão foi liberado!
+    // Se o usuário soltou após atingir um dos feedbacks visuais ao segurar:
+    if (holdAction == 2) {
+        Serial.println("\n[Button] >>> AÇÃO: MODO MANUTENÇÃO (via botão segurado >=3.5s) <<<");
+        blinkLed(3, 100, 100);
         MaintenanceService::start();
         while (MaintenanceService::isRunning()) {
             MaintenanceService::handle();
@@ -138,51 +164,90 @@ void handleLightWakeup() {
         return;
     }
 
-    if (pressType == 1) {
-        Serial.println("[Button] Pressionamento longo (2.5s) detectado! Forçando sincronização da agenda...");
-        while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
-            delay(50);
-        }
-        return; // Retorna para que setup() continue a execução normal de atualização
+    if (holdAction == 1) {
+        Serial.println("\n[Button] >>> AÇÃO: FORÇAR SINCRONIZAÇÃO (via botão segurado >=1.5s) <<<");
+        blinkLed(2, 220, 150);
+        return; // Retorna para setup() executar o ciclo completo
     }
 
-    // Toque rápido: Acende a iluminação de leitura
-    pinMode(LIGHT_PIN_LED, OUTPUT);
-    digitalWrite(LIGHT_PIN_LED, HIGH);
-    Serial.printf("[Light] LEDs acesos por até %d segundos...\n", LIGHT_TIMEOUT_SECONDS);
+    // Se soltou rapidamente (<1.5s), detecta possíveis cliques adicionais (duplo ou triplo clique)
+    int clickCount = 1;
+    unsigned long releaseTime = millis();
 
+    while ((millis() - releaseTime) < 450) {
+        if (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+            // Clique #2 detectado!
+            delay(30); // debounce
+            while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+                delay(10);
+                if (millis() - releaseTime > 2000) break;
+            }
+            clickCount = 2;
+            releaseTime = millis();
 
-    // Debounce inicial
-    delay(200);
+            // Aguarda até 400ms por um possível clique #3
+            while ((millis() - releaseTime) < 400) {
+                if (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+                    delay(30); // debounce
+                    while (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
+                        delay(10);
+                        if (millis() - releaseTime > 2000) break;
+                    }
+                    clickCount = 3;
+                    break;
+                }
+                delay(10);
+            }
+            break;
+        }
+        delay(10);
+    }
 
-    // Monitora o tempo e permite desligar antes com um segundo toque (toggle)
+    // -------------------------------------------------------------
+    // Executa a ação do comando por múltiplos cliques
+    // -------------------------------------------------------------
+    if (clickCount == 3) {
+        // 3 cliques: MODO MANUTENÇÃO
+        Serial.println("\n[Button] >>> AÇÃO: 3 CLIQUES DETECTADOS -> MODO MANUTENÇÃO <<<");
+        blinkLed(3, 100, 100);
+        MaintenanceService::start();
+        while (MaintenanceService::isRunning()) {
+            MaintenanceService::handle();
+            delay(10);
+        }
+        return;
+    }
+
+    if (clickCount == 2) {
+        // 2 cliques: FORÇAR SINCRONIZAÇÃO
+        Serial.println("\n[Button] >>> AÇÃO: 2 CLIQUES DETECTADOS -> FORÇAR SINCRONIZAÇÃO <<<");
+        blinkLed(2, 200, 150);
+        return; // Continua para setup()
+    }
+
+    // 1 clique: LUZ DE LEITURA
+    Serial.println("\n[Button] >>> AÇÃO: 1 CLIQUE -> LUZ DE LEITURA (15s) <<<");
     unsigned long startMs = millis();
     unsigned long durationMs = (unsigned long)LIGHT_TIMEOUT_SECONDS * 1000UL;
 
     while ((millis() - startMs) < durationMs) {
-        delay(50);
+        delay(40);
         if (digitalRead(LIGHT_PIN_BUTTON) == LOW) {
             Serial.println("[Light] Botão pressionado novamente. Desligando antecipadamente.");
-            delay(250); // debounce
+            delay(200); // debounce
+            while (digitalRead(LIGHT_PIN_BUTTON) == LOW) delay(20);
             break;
         }
     }
 
     // Apaga os LEDs
     digitalWrite(LIGHT_PIN_LED, LOW);
-    Serial.println("[Light] LEDs apagados.");
+    Serial.println("[Light] LEDs apagados. Retornando ao Deep Sleep.");
 
-    // Aguarda soltar o botão com timeout de segurança de 2s para evitar qualquer travamento
-    unsigned long releaseStart = millis();
-    while (digitalRead(LIGHT_PIN_BUTTON) == LOW && (millis() - releaseStart) < 2000) {
-        delay(50);
-    }
-
-    // Configura fuso horário local
+    // Configura e retorna ao Deep Sleep
     setenv("TZ", TIMEZONE_POSIX, 1);
     tzset();
 
-    // Calcula tempo restante até a próxima sincronização de calendário
     time_t now = time(nullptr);
     struct tm timeinfo = {0};
     uint64_t sleepSec = 3600;
@@ -192,10 +257,8 @@ void handleLightWakeup() {
     }
 
     Serial.printf("[Power] Retornando ao Deep Sleep por %llu segundos...\n", sleepSec);
-    Serial.println("==============================================\n");
     Serial.flush();
 
-    // Mantém domínio de periféricos RTC ativo para manter o pull-up ligado em Deep Sleep
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
     pinMode(LIGHT_PIN_BUTTON, INPUT_PULLUP);
     rtc_gpio_pullup_en((gpio_num_t)LIGHT_PIN_BUTTON);
@@ -209,19 +272,12 @@ void handleLightWakeup() {
 
 void setup() {
     Serial.begin(115200);
-    delay(500);
 
     AppLog::init();
     setenv("TZ", TIMEZONE_POSIX, 1);
     tzset();
 
-
-    Serial.println("\n==============================================");
-    Serial.println("  Smart Calendar (frw-cal) - NodeMCU-32S ESP32");
-    Serial.println("==============================================");
-
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-    Serial.printf("[Power] Motivo de inicialização: %d\n", wakeup_reason);
 
 #if LIGHT_ENABLED
     // Libera o hold do pino para uso em modo acordado
@@ -230,12 +286,17 @@ void setup() {
     digitalWrite(LIGHT_PIN_LED, LOW);
     pinMode(LIGHT_PIN_BUTTON, INPUT_PULLUP);
 
-    // Se acordou pelo botão de leitura:
+    // Se acordou pelo botão (EXT0):
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
-        handleLightWakeup();
-        // Se handleLightWakeup() retornou, foi um toque longo (> 2.5s) para forçar sincronização!
+        handleButtonInteraction();
+        // Se a função retornou, é porque o comando foi FORÇAR SINCRONIZAÇÃO!
     }
 #endif
+
+    Serial.println("\n==============================================");
+    Serial.println("  Smart Calendar (frw-cal) - NodeMCU-32S ESP32");
+    Serial.println("==============================================");
+    Serial.printf("[Power] Motivo de inicialização: %d\n", wakeup_reason);
 
     canvas.setRotation(DISPLAY_ROTATION);
 
