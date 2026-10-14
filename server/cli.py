@@ -322,9 +322,9 @@ def render_dashboard():
         output.append(make_box_line(l6, box_w, B_BLUE))
     else:
         output.append(make_box_line(f"{DIM}Nenhum dado recebido ainda do ESP32.{RESET}", box_w, B_BLUE))
-        output.append(make_box_line(f"Para receber telemetria automaticamente:", box_w, B_BLUE))
-        output.append(make_box_line(f"1. Libere a porta {BOLD}TCP 8000{RESET} na Security List da Oracle Cloud (VCN).", box_w, B_BLUE))
-        output.append(make_box_line(f"2. Ou segure o botão do ESP32 por {BOLD}5 segundos{RESET} para o Modo Manutenção.", box_w, B_BLUE))
+        output.append(make_box_line(f"O ESP32 enviará telemetria automaticamente via túnel WireGuard (10.8.0.7):", box_w, B_BLUE))
+        output.append(make_box_line(f"• Para forçar agora: segure o botão do ESP32 por {BOLD}3 segundos{RESET} (sincronizar).", box_w, B_BLUE))
+        output.append(make_box_line(f"• Para modo manutenção: segure o botão por {BOLD}5 segundos{RESET} (OTA e Web UI).", box_w, B_BLUE))
     output.append(f"  {B_BLUE}└─────────────────────────────────────────────────────────────────────────────┘{RESET}")
 
     # Caixa de Firmware OTA Ativo

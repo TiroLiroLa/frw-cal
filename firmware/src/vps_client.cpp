@@ -31,19 +31,23 @@ VpsCheckinResult VpsClient::checkin(
     }
 
     String endpoint = host;
-    if (!endpoint.endsWith("/")) {
-        endpoint += "/";
-    }
-    endpoint += "api/checkin";
-
 #if WIREGUARD_ENABLED
     WireGuard wg;
     bool wgActive = false;
-    if (endpoint.indexOf("10.8.0.1") >= 0) {
-        AppLog::log("[VPS] Iniciando túnel WireGuard para check-in...");
-        wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
-        delay(150);
+    AppLog::log("[VPS] Iniciando túnel WireGuard (Oracle VPN)...");
+    wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
+    if (wgActive) {
+        AppLog::logf("[VPS] WireGuard conectado com IP %s!", WIREGUARD_LOCAL_IP.toString().c_str());
+        endpoint = "http://10.8.0.1:8000/api/checkin";
+    } else {
+        AppLog::log("[VPS] Falha ao conectar WireGuard, tentando endpoint padrão...");
+        if (!endpoint.endsWith("/")) endpoint += "/";
+        endpoint += "api/checkin";
     }
+    delay(200);
+#else
+    if (!endpoint.endsWith("/")) endpoint += "/";
+    endpoint += "api/checkin";
 #endif
 
     AppLog::logf("[VPS] Enviando check-in para %s...", endpoint.c_str());
@@ -126,29 +130,31 @@ VpsCheckinResult VpsClient::checkin(
 bool VpsClient::downloadAndApplyOta(const String& firmwareUrl) {
     if (firmwareUrl.length() == 0) return false;
 
-    AppLog::logf("[VPS OTA] Iniciando download e gravação de %s...", firmwareUrl.c_str());
-
+    String url = firmwareUrl;
 #if WIREGUARD_ENABLED
     WireGuard wg;
     bool wgActive = false;
-    if (firmwareUrl.indexOf("10.8.0.1") >= 0) {
-        AppLog::log("[VPS OTA] Iniciando túnel WireGuard para download do firmware...");
-        wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
-        delay(150);
+    AppLog::log("[VPS OTA] Iniciando túnel WireGuard para download do firmware...");
+    wgActive = wg.begin(WIREGUARD_LOCAL_IP, WIREGUARD_PRIVATE_KEY, WIREGUARD_ENDPOINT_ADDRESS, WIREGUARD_SERVER_PUBKEY, WIREGUARD_ENDPOINT_PORT);
+    if (wgActive) {
+        url.replace("163.176.44.220:8000", "10.8.0.1:8000");
     }
+    delay(200);
 #endif
+
+    AppLog::logf("[VPS OTA] Iniciando download e gravação de %s...", url.c_str());
 
     httpUpdate.setLedPin(-1);
     httpUpdate.rebootOnUpdate(false); // We control reboot explicitly
 
     t_httpUpdate_return ret;
-    if (firmwareUrl.startsWith("https://")) {
+    if (url.startsWith("https://")) {
         WiFiClientSecure secureClient;
         secureClient.setInsecure();
-        ret = httpUpdate.update(secureClient, firmwareUrl);
+        ret = httpUpdate.update(secureClient, url);
     } else {
         WiFiClient client;
-        ret = httpUpdate.update(client, firmwareUrl);
+        ret = httpUpdate.update(client, url);
     }
 
 #if WIREGUARD_ENABLED

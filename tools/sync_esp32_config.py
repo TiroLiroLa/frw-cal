@@ -203,7 +203,7 @@ static const char* GOOGLE_CALENDARS[MAX_CALENDARS] = {{
 #define VPS_ENABLED          true
 #define VPS_HOST             "http://10.8.0.1:8000"
 #define VPS_API_KEY          "frw-cal-secret-token"
-#define FIRMWARE_VERSION     "1.2.0"
+#define FIRMWARE_VERSION     "v1.2.1-vpn"
 
 // 12. Rede Privada Oracle VPN (WireGuard)
 #define WIREGUARD_ENABLED            true
